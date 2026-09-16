@@ -26,10 +26,10 @@ class KalshiDatabase:
             """
             PRAGMA foreign_keys = ON;
             CREATE TABLE IF NOT EXISTS markets (
-                ticker TEXT PRIMARY KEY, event TEXT, title TEXT, category TEXT,
-                created_time TEXT, open_time TEXT, close_time TEXT,
+                ticker TEXT PRIMARY KEY, event TEXT, title TEXT, question TEXT,
+                category TEXT, created_time TEXT, open_time TEXT, close_time TEXT,
                 settlement_time TEXT, status TEXT, rules TEXT,
-                schema_version TEXT NOT NULL
+                settlement_source TEXT, schema_version TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS market_observations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL,
@@ -58,6 +58,13 @@ class KalshiDatabase:
             );
             """
         )
+        market_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(markets)")}
+        for name, column_type in {
+            "question": "TEXT",
+            "settlement_source": "TEXT",
+        }.items():
+            if name not in market_columns:
+                self.connection.execute(f"ALTER TABLE markets ADD COLUMN {name} {column_type}")
         columns = {row[1] for row in self.connection.execute("PRAGMA table_info(raw_api_responses)")}
         if "payload_sha256" not in columns:
             self.connection.execute("ALTER TABLE raw_api_responses ADD COLUMN payload_sha256 TEXT NOT NULL DEFAULT ''")
@@ -73,12 +80,29 @@ class KalshiDatabase:
 
     def save_market(self, market: Market) -> None:
         self.connection.execute(
-            """INSERT INTO markets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO markets (ticker, event, title, question, category, created_time, open_time, close_time,
+            settlement_time, status, rules, settlement_source, schema_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(ticker) DO UPDATE SET event=excluded.event, title=excluded.title,
-               category=excluded.category, created_time=excluded.created_time, open_time=excluded.open_time,
-               close_time=excluded.close_time, settlement_time=excluded.settlement_time,
-               status=excluded.status, rules=excluded.rules, schema_version=excluded.schema_version""",
-            (*market.__dict__.values(), SCHEMA_VERSION),
+               question=excluded.question, category=excluded.category, created_time=excluded.created_time,
+               open_time=excluded.open_time, close_time=excluded.close_time, settlement_time=excluded.settlement_time,
+               status=excluded.status, rules=excluded.rules, settlement_source=excluded.settlement_source,
+               schema_version=excluded.schema_version""",
+            (
+                market.ticker,
+                market.event,
+                market.title,
+                market.question,
+                market.category,
+                market.created_time,
+                market.open_time,
+                market.close_time,
+                market.settlement_time,
+                market.status,
+                market.rules,
+                market.settlement_source,
+                SCHEMA_VERSION,
+            ),
         )
         self.connection.commit()
 

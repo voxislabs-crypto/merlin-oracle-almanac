@@ -2,6 +2,7 @@ import argparse
 import json
 
 from .backtest import load_rows, run_backtest
+from .harvest import OracleHarvester, SourceRegistry
 from .kalshi import KalshiDatabase, KalshiImporter
 from .kalshi.client import KalshiClient
 
@@ -17,6 +18,9 @@ def main() -> None:
     import_command.add_argument("ticker")
     import_command.add_argument("--start-ts", type=int)
     import_command.add_argument("--end-ts", type=int)
+    dossier = commands.add_parser("dossier")
+    dossier.add_argument("question")
+    dossier.add_argument("--source", action="append", default=[])
     backtest = commands.add_parser("backtest")
     backtest.add_argument("--cutoff", required=True, help="ISO timestamp separating training and test settlements")
     backtest.add_argument("--min-edge", type=float, default=0.05)
@@ -24,6 +28,7 @@ def main() -> None:
     backtest.add_argument("--max-fraction", type=float, default=0.02)
     commands.add_parser("status")
     commands.add_parser("database")
+    commands.add_parser("sources")
     args = parser.parse_args()
     database = KalshiDatabase(args.database)
     try:
@@ -32,6 +37,11 @@ def main() -> None:
             print(json.dumps(payload, indent=2))
         elif args.command == "import":
             print(json.dumps(KalshiImporter(database).import_market(args.ticker, args.start_ts, args.end_ts), indent=2))
+        elif args.command == "dossier":
+            dossier = OracleHarvester(database).create_dossier(args.question, args.source)
+            print(json.dumps({"id": dossier.id, "question": dossier.question, "sources": dossier.sources}, indent=2))
+        elif args.command == "sources":
+            print(json.dumps([source.name for source in SourceRegistry.default_registry().sources], indent=2))
         elif args.command == "backtest":
             print(json.dumps(run_backtest(load_rows(database.connection), args.cutoff, args.min_edge, args.fee_cents, args.max_fraction), indent=2))
         else:

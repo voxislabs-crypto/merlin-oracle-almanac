@@ -35,11 +35,58 @@ setTimeout(() => {
     );
 }, 0);
 const storeKey = "merlin-oracle-store";
+const seededAlmanacEntry = {
+  title: "PRIVATE ORACLE • ALMANAC ENTRY",
+  reference: "Federal Reserve Decision",
+  window: "NOV 24 — DEC 18",
+  hypothesis:
+    "ENTRY #0001\nMARKET EVENT\nFederal Reserve Decision\nCURRENT ODDS\n62%\nORACLE TIMETRAK\nLOCKED BEFORE OUTCOME\nNOV 24\nDEC 6\nDEC 18\nPEAK\nONSET\nNOV 24\nPEAK\nDEC 4–8\nINTENSITY\n82 / 100\nCONVERGENCE\nHIGH\nFORECAST STATUS\n🔒 Sealed before the outcome\nThe point is not to know the future. The point is to see whether the signal was there before it happened.",
+  created: "2026-09-16",
+};
+const defaultSources = [
+  "Kalshi",
+  "Polymarket",
+  "Metaculus",
+  "Manifold",
+  "FRED",
+  "NOAA",
+  "Government",
+  "Custom URL",
+];
 let store = JSON.parse(localStorage.getItem(storeKey) || "null") || {
   charts: [],
   entries: [],
   experiments: [],
+  dossiers: [
+    {
+      id: "DOSSIER-001",
+      question: "Will the Fed cut rates?",
+      market: "FED-SEP",
+      settlementSource: "FOMC statement / official policy release",
+      oracleSignal: "TimeTrak signal: HIGH / 82 / 100",
+      sources: ["Kalshi", "FRED", "Government"],
+      notes: [
+        "Prediction-market prices, official economic indicators, and policy timing are kept separate from the later TimeTrak interpretation.",
+        "Raw market data and official source notes are stored without altering the later Oracle conclusion.",
+      ],
+      timeline: [
+        { label: "RAW MARKET", value: "Kalshi yes price 73% before the policy release." },
+        { label: "OFFICIAL SOURCE", value: "FOMC statement and rate decision checklist recorded as the settlement reference." },
+        { label: "ORACLE SIGNAL", value: "TimeTrak intensity 82 / 100 with a convergence window in the rate decision period." },
+      ],
+      created: "2026-09-16",
+    },
+  ],
 };
+function ensureSeededAlmanacEntry() {
+  const hasEntry = store.entries.some(
+    (entry) => entry.title === seededAlmanacEntry.title,
+  );
+  if (!hasEntry) {
+    store.entries = [seededAlmanacEntry, ...store.entries];
+    persist();
+  }
+}
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const candidates = [
@@ -176,6 +223,53 @@ function renderJournal() {
         `<article class="journal-entry"><span class="sealed-tag">SEALED · ${e.created}</span><h3>${escapeHtml(e.title)}</h3><div class="journal-meta"><span>REFERENCE: ${escapeHtml(e.reference || "UNSPECIFIED")}</span><span>WINDOW: ${escapeHtml(e.window || "UNSPECIFIED")}</span></div><p class="journal-body">${escapeHtml(e.hypothesis)}</p></article>`,
     )
     .join("");
+}
+function renderDossiers() {
+  const el = $("#dossier-list");
+  if (!el) return;
+  if (!store.dossiers?.length) {
+    el.innerHTML =
+      '<div class="empty-state"><b>No event dossier yet.</b>Build a dossier around a question and attach the relevant sources.</div>';
+    return;
+  }
+  el.innerHTML = store.dossiers
+    .map(
+      (dossier) => `
+        <article class="dossier-card" data-dossier-id="${escapeHtml(dossier.id || "")}" tabindex="0">
+          <div class="dossier-head">
+            <span class="section-kicker">EVENT DOSSIER</span>
+            <strong>${escapeHtml(dossier.created || "UNDATED")}</strong>
+          </div>
+          <h3>${escapeHtml(dossier.question || "Untitled question")}</h3>
+          <div class="dossier-meta">
+            <div><span>MARKET</span><b>${escapeHtml(dossier.market || "UNSPECIFIED")}</b></div>
+            <div><span>SETTLEMENT SOURCE</span><b>${escapeHtml(dossier.settlementSource || "OFFICIAL SOURCE TBD")}</b></div>
+            <div><span>ORACLE SIGNAL</span><b>${escapeHtml(dossier.oracleSignal || "SIGNAL PENDING")}</b></div>
+          </div>
+          <div class="dossier-sources">
+            ${(dossier.sources || []).map((source) => `<span>${escapeHtml(source)}</span>`).join("") || '<span>NO SOURCES ATTACHED</span>'}
+          </div>
+          <div class="dossier-ledger">
+            <div class="ledger-row"><span>RAW DATA</span><em>Collect before interpretation. Evidence is preserved without revision.</em></div>
+            <div class="ledger-row"><span>OFFICIAL SOURCE</span><em>${escapeHtml(dossier.settlementSource || "No settlement source recorded yet.")}</em></div>
+            <div class="ledger-row"><span>TIMETrak</span><em>${escapeHtml(dossier.oracleSignal || "Signal pending")}</em></div>
+          </div>
+          <div class="dossier-notes">
+            ${(dossier.notes || []).map((note) => `<p>${escapeHtml(note)}</p>`).join("") || '<p>No notes recorded yet.</p>'}
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+  $$(".dossier-card").forEach((card) => {
+    card.addEventListener("click", () => openDossierDetail(card.dataset.dossierId));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openDossierDetail(card.dataset.dossierId);
+      }
+    });
+  });
 }
 function renderExperiments() {
   const el = $("#experiment-list");
@@ -603,10 +697,50 @@ function runDivergence() {
   $("#divergence-status").textContent = "DESCRIPTIVE";
   toast("Divergence lens calculated. No predictive claim was made.");
 }
+function openDossierDetail(dossierId) {
+  const dossier = (store.dossiers || []).find((entry) => entry.id === dossierId);
+  if (!dossier) return;
+  const form = $("#modal-form");
+  $("#modal-eyebrow").textContent = "EVIDENCE LEDGER";
+  $("#modal-title").textContent = dossier.question || "Event dossier";
+  $("#modal-copy").textContent =
+    "Raw evidence remains intact. The Oracle interpretation is kept separate in the event ledger.";
+  const timelineHtml = (dossier.timeline || []).map(
+    (item) =>
+      `<div class="detail-ledger-row"><span>${escapeHtml(item.label)}</span><b>${escapeHtml(item.value)}</b></div>`,
+  ).join("") || '<div class="detail-ledger-row"><span>NO DATA</span><b>No timeline recorded yet.</b></div>';
+  const sourcesHtml = (dossier.sources || []).map(
+    (source) => `<span class="detail-chip">${escapeHtml(source)}</span>`,
+  ).join("") || '<span class="detail-chip">Unavailable</span>';
+  const notesHtml = (dossier.notes || []).map((note) => `<p>${escapeHtml(note)}</p>`).join("") || "<p>No notes recorded yet.</p>";
+  form.innerHTML = `
+    <div class="detail-panel">
+      <div class="detail-grid">
+        <div><span>MARKET</span><b>${escapeHtml(dossier.market || "UNSPECIFIED")}</b></div>
+        <div><span>SETTLEMENT</span><b>${escapeHtml(dossier.settlementSource || "OFFICIAL SOURCE TBD")}</b></div>
+        <div><span>ORACLE SIGNAL</span><b>${escapeHtml(dossier.oracleSignal || "SIGNAL PENDING")}</b></div>
+      </div>
+      <div class="detail-section">
+        <h4>SOURCES</h4>
+        <div class="detail-source-list">${sourcesHtml}</div>
+      </div>
+      <div class="detail-section">
+        <h4>EVIDENCE TIMELINE</h4>
+        <div class="detail-ledger">${timelineHtml}</div>
+      </div>
+      <div class="detail-section">
+        <h4>NOTES</h4>
+        <div class="detail-notes">${notesHtml}</div>
+      </div>
+    </div>
+  `;
+  $("#modal-backdrop").classList.add("open");
+}
 function renderAll() {
   renderCharts();
   renderTraks();
   renderJournal();
+  renderDossiers();
   renderExperiments();
   renderHistorical();
   renderTrainer();
@@ -659,6 +793,55 @@ function openModal(type) {
       switchView("almanac");
       toast("Entry sealed. The record is now immutable.");
     };
+  } else if (type === "dossier") {
+    $("#modal-eyebrow").textContent = "EVIDENCE COLLECTION";
+    $("#modal-title").textContent = "Build event dossier";
+    copy.textContent =
+      "Create a question and attach the relevant sources before interpreting the result.";
+    form.innerHTML = `
+      <div class="form-grid">
+        <div class="field full"><label>QUESTION</label><input name="question" required placeholder="Will the Fed cut rates?"></div>
+        <div class="field"><label>MARKET</label><input name="market" placeholder="FED-SEP"></div>
+        <div class="field"><label>SETTLEMENT SOURCE</label><input name="settlementSource" placeholder="FOMC statement / official release"></div>
+        <div class="field full"><label>SOURCES</label>
+          <div class="source-checklist">
+            ${defaultSources
+              .map(
+                (source) =>
+                  `<label class="source-option"><input type="checkbox" name="sources" value="${source}"> ${source}</label>`,
+              )
+              .join("")}
+          </div>
+        </div>
+        <div class="field full"><label>ORACLE SIGNAL</label><input name="oracleSignal" placeholder="TimeTrak signal: HIGH / 82 / 100"></div>
+        <div class="field full"><label>NOTES</label><textarea name="notes" placeholder="Keep raw evidence separate from the Oracle interpretation."></textarea></div>
+      </div>
+      <button class="primary-button form-submit" type="submit">CREATE DOSSIER →</button>
+    `;
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const selectedSources = formData.getAll("sources");
+      const notes = [
+        formData.get("notes")?.toString().trim(),
+      ].filter(Boolean);
+      const dossier = {
+        id: `DOSSIER-${String((store.dossiers?.length || 0) + 1).padStart(3, "0")}`,
+        question: formData.get("question")?.toString().trim() || "Untitled question",
+        market: formData.get("market")?.toString().trim() || "UNSPECIFIED",
+        settlementSource: formData.get("settlementSource")?.toString().trim() || "OFFICIAL SOURCE TBD",
+        oracleSignal: formData.get("oracleSignal")?.toString().trim() || "SIGNAL PENDING",
+        sources: selectedSources.length ? selectedSources : ["Custom URL"],
+        notes,
+        created: new Date().toLocaleDateString(),
+      };
+      store.dossiers = [...(store.dossiers || []), dossier];
+      persist();
+      closeModal();
+      renderAll();
+      switchView("dossier");
+      toast("Event dossier created.");
+    };
   } else {
     $("#modal-eyebrow").textContent = "LAB NOTEBOOK";
     $("#modal-title").textContent = "New experiment";
@@ -692,6 +875,9 @@ $$('[data-action="create-chart"]').forEach((b) =>
 $$('[data-action="new-entry"]').forEach((b) =>
   b.addEventListener("click", () => openModal("entry")),
 );
+$$('[data-action="new-dossier"]').forEach((b) =>
+  b.addEventListener("click", () => openModal("dossier")),
+);
 $$('[data-action="new-experiment"]').forEach((b) =>
   b.addEventListener("click", () => openModal("experiment")),
 );
@@ -713,4 +899,5 @@ function updateClock() {
 }
 setInterval(updateClock, 1000);
 updateClock();
+ensureSeededAlmanacEntry();
 renderAll();

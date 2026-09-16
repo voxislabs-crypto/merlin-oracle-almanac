@@ -1850,6 +1850,207 @@ body {
   color: #777984;
   font-size: 8px;
 }
+.dossier-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+}
+.dossier-list {
+  display: grid;
+  gap: 10px;
+}
+.dossier-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 18px 20px 20px;
+}
+.dossier-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #7e7f8a;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dossier-head strong {
+  color: var(--gold);
+  font-weight: 400;
+}
+.dossier-card h3 {
+  font: 600 30px/1.1 var(--serif);
+  margin: 14px 0 12px;
+}
+.dossier-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.dossier-meta div {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+.dossier-meta span {
+  display: block;
+  color: #757985;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.dossier-meta b {
+  color: var(--ivory);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.dossier-sources {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.dossier-sources span {
+  background: rgba(201, 163, 91, 0.08);
+  border: 1px solid rgba(201, 163, 91, 0.35);
+  color: var(--gold);
+  padding: 6px 10px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dossier-ledger {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ledger-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  font-size: 10px;
+  color: #9a9ca5;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.ledger-row span {
+  color: #7a7e8b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ledger-row em {
+  font-style: normal;
+  color: #d2cdbd;
+  line-height: 1.5;
+}
+.dossier-notes {
+  display: grid;
+  gap: 10px;
+}
+.dossier-notes p {
+  margin: 0;
+  color: #a9a8ae;
+  line-height: 1.6;
+  font: 14px/1.6 var(--serif);
+}
+.detail-panel {
+  display: grid;
+  gap: 16px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.detail-grid div {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+.detail-grid span {
+  display: block;
+  color: #757985;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.detail-grid b {
+  color: var(--ivory);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.detail-section h4 {
+  margin: 0 0 10px;
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.detail-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-chip {
+  background: rgba(201, 163, 91, 0.08);
+  border: 1px solid rgba(201, 163, 91, 0.35);
+  color: var(--gold);
+  font-size: 8px;
+  padding: 6px 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.detail-ledger {
+  display: grid;
+  gap: 8px;
+}
+.detail-ledger-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.detail-ledger-row span {
+  color: #7d818c;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.detail-ledger-row b {
+  color: var(--ivory);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.detail-notes {
+  display: grid;
+  gap: 8px;
+}
+.detail-notes p {
+  margin: 0;
+  color: #b4b2ae;
+  line-height: 1.7;
+  font: 14px/1.6 var(--serif);
+}
+.source-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 8px 14px;
+  color: var(--ivory);
+}
+.source-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #d8d5cc;
+}
+.source-option input {
+  accent-color: var(--gold);
+}
 .journal-entry {
   background: #16171d;
   border: 1px solid #34333a;
@@ -1880,6 +2081,7 @@ body {
   font: 16px/1.5 var(--serif);
   max-width: 680px;
   margin: 18px 0;
+  white-space: pre-line;
 }
 .sealed-tag {
   color: #9b8760;

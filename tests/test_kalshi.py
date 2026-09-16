@@ -11,7 +11,7 @@ from oracle.timetrak import TIMETRAK_VERSION, calculate_signal
 
 class FakeClient:
     def market(self, ticker):
-        return {"market": {"ticker": ticker, "title": "Test market", "created_time": "2025-01-01T00:00:00Z", "status": "closed", "result": "yes"}}
+        return {"market": {"ticker": ticker, "title": "Test market", "created_time": "2025-01-01T00:00:00Z", "status": "closed", "result": "yes", "question": "Will it happen?", "rules": "Official source determines settlement.", "settlement_source": "NWS Daily Climate Report"}}
 
     def candlesticks(self, ticker, start_ts=None, end_ts=None):
         return {"candlesticks": [{"end_period_ts": 1735689660, "yes_price": 42, "no_price": 58, "volume": 12}, {"end_period_ts": 1735689660, "yes_price": 42, "no_price": 58, "volume": 12}]}
@@ -27,6 +27,22 @@ class KalshiImportTests(unittest.TestCase):
         self.assertEqual(signal.calculation_version, TIMETRAK_VERSION)
         self.assertGreaterEqual(signal.intensity, 0)
         self.assertLessEqual(signal.intensity, 100)
+
+    def test_market_rules_and_settlement_source_are_preserved(self):
+        from oracle.kalshi.models import Market
+
+        market = Market.from_api({
+            "ticker": "TEST-1",
+            "title": "Test market",
+            "question": "Will it happen?",
+            "rules": "Official source determines settlement.",
+            "settlement_source": "NWS Daily Climate Report",
+            "created_time": "2025-01-01T00:00:00Z",
+            "status": "closed",
+        })
+        self.assertEqual(market.question, "Will it happen?")
+        self.assertEqual(market.rules, "Official source determines settlement.")
+        self.assertEqual(market.settlement_source, "NWS Daily Climate Report")
 
     def test_import_is_idempotent_and_keeps_utc_timestamps(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -45,6 +61,10 @@ class KalshiImportTests(unittest.TestCase):
             self.assertIn("Saturn", sky[1])
             self.assertTrue(sky[2])
             self.assertTrue(sky[3])
+            market_row = database.connection.execute("SELECT question, settlement_source, rules FROM markets WHERE ticker = 'TEST-1'").fetchone()
+            self.assertEqual(market_row[0], "Will it happen?")
+            self.assertEqual(market_row[1], "NWS Daily Climate Report")
+            self.assertIn("Official source", market_row[2])
             raw = database.connection.execute("SELECT payload_sha256, payload FROM raw_api_responses ORDER BY id LIMIT 1").fetchone()
             self.assertEqual(raw[0], hashlib.sha256(raw[1].encode()).hexdigest())
             database.close()

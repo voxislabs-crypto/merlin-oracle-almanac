@@ -21,6 +21,7 @@ class Market:
     ticker: str
     event: str | None = None
     title: str | None = None
+    question: str | None = None
     category: str | None = None
     created_time: str | None = None
     open_time: str | None = None
@@ -28,6 +29,7 @@ class Market:
     settlement_time: str | None = None
     status: str | None = None
     rules: str | None = None
+    settlement_source: str | None = None
 
     @classmethod
     def from_api(cls, payload: dict[str, Any]) -> "Market":
@@ -35,6 +37,7 @@ class Market:
             ticker=payload["ticker"],
             event=payload.get("event_ticker") or payload.get("event"),
             title=payload.get("title") or payload.get("subtitle"),
+            question=payload.get("question") or payload.get("title") or payload.get("subtitle"),
             category=payload.get("category"),
             created_time=utc_timestamp(payload.get("created_time")),
             open_time=utc_timestamp(payload.get("open_time")),
@@ -42,6 +45,7 @@ class Market:
             settlement_time=utc_timestamp(payload.get("settlement_time")),
             status=payload.get("status"),
             rules=payload.get("rules_primary") or payload.get("rules"),
+            settlement_source=payload.get("settlement_source") or payload.get("official_source"),
         )
 
 
