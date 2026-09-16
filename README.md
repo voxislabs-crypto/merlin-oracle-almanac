@@ -34,6 +34,17 @@ oracle kalshi status
 
 The importer does not place orders, access accounts, or modify Kalshi data.
 
+## Calibrated backtesting
+
+Once the database contains settled markets, run a time-split, read-only paper backtest:
+
+```bash
+python oracle.py backtest --database data/kalshi.db --cutoff 2025-01-01T00:00:00Z \
+	--min-edge 0.05 --fee-cents 1.0 --max-fraction 0.02
+```
+
+The cutoff divides markets by settlement time, so the model only trains on outcomes that would have been known before the test set. The report compares market and model Brier scores, log loss, calibration error, paper profit after the supplied per-contract fee, maximum drawdown, and capped Kelly fractions. It uses executable yes asks when available and never places orders. A positive historical result is not evidence of future profitability; use an untouched later period and the exchange's current fee schedule before risking capital.
+
 ## Experimental Astronomy
 
 Each imported observation now receives a deterministic local astronomy record and a `TimeTrak_Experimental_Astronomy_v0` result. The current calculator uses mean orbital periods and approximate J2000 longitudes for reproducible research inputs. It is intentionally low precision, is not the historical Merlin algorithm, and must not be treated as a verified ephemeris or predictive model.
