@@ -1,4 +1,5 @@
 import json
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,9 @@ class KalshiDatabase:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL,
                 timestamp TEXT NOT NULL, yes_price REAL, no_price REAL,
                 yes_bid REAL, yes_ask REAL, volume REAL, open_interest REAL,
+                sky_signal REAL, sky_aspect TEXT, sky_orb REAL, sky_direction TEXT,
+                sky_onset TEXT, sky_peak TEXT, sky_duration_hours REAL,
+                astronomy_version TEXT, timetrak_version TEXT,
                 schema_version TEXT NOT NULL,
                 UNIQUE(ticker, timestamp), FOREIGN KEY(ticker) REFERENCES markets(ticker)
             );
@@ -44,7 +48,7 @@ class KalshiDatabase:
             );
             CREATE TABLE IF NOT EXISTS raw_api_responses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, endpoint TEXT NOT NULL,
-                fetched_at TEXT NOT NULL, schema_version TEXT NOT NULL, payload TEXT NOT NULL
+                fetched_at TEXT NOT NULL, schema_version TEXT NOT NULL, payload_sha256 TEXT NOT NULL, payload TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS import_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, started_at TEXT NOT NULL,
@@ -54,6 +58,17 @@ class KalshiDatabase:
             );
             """
         )
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(raw_api_responses)")}
+        if "payload_sha256" not in columns:
+            self.connection.execute("ALTER TABLE raw_api_responses ADD COLUMN payload_sha256 TEXT NOT NULL DEFAULT ''")
+        observation_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(market_observations)")}
+        for name, column_type in {
+            "sky_signal": "REAL", "sky_aspect": "TEXT", "sky_orb": "REAL", "sky_direction": "TEXT",
+            "sky_onset": "TEXT", "sky_peak": "TEXT", "sky_duration_hours": "REAL",
+            "astronomy_version": "TEXT", "timetrak_version": "TEXT",
+        }.items():
+            if name not in observation_columns:
+                self.connection.execute(f"ALTER TABLE market_observations ADD COLUMN {name} {column_type}")
         self.connection.commit()
 
     def save_market(self, market: Market) -> None:
@@ -68,9 +83,10 @@ class KalshiDatabase:
         self.connection.commit()
 
     def save_raw(self, ticker: str | None, endpoint: str, payload: Any) -> None:
+        serialized = json.dumps(payload, sort_keys=True)
         self.connection.execute(
-            "INSERT INTO raw_api_responses(ticker, endpoint, fetched_at, schema_version, payload) VALUES (?, ?, ?, ?, ?)",
-            (ticker, endpoint, datetime.now(timezone.utc).isoformat(), SCHEMA_VERSION, json.dumps(payload)),
+            "INSERT INTO raw_api_responses(ticker, endpoint, fetched_at, schema_version, payload_sha256, payload) VALUES (?, ?, ?, ?, ?, ?)",
+            (ticker, endpoint, datetime.now(timezone.utc).isoformat(), SCHEMA_VERSION, hashlib.sha256(serialized.encode()).hexdigest(), serialized),
         )
         self.connection.commit()
 
@@ -80,8 +96,10 @@ class KalshiDatabase:
         for observation in observations:
             cursor = self.connection.execute(
                 """INSERT OR IGNORE INTO market_observations
-                (ticker, timestamp, yes_price, no_price, yes_bid, yes_ask, volume, open_interest, schema_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ticker, timestamp, yes_price, no_price, yes_bid, yes_ask, volume, open_interest,
+                 sky_signal, sky_aspect, sky_orb, sky_direction, sky_onset, sky_peak,
+                 sky_duration_hours, astronomy_version, timetrak_version, schema_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (*observation.__dict__.values(), SCHEMA_VERSION),
             )
             if cursor.rowcount:

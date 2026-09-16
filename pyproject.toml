@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "merlin-oracle-almanac"
+version = "0.1.0"
+description = "Offline research tools for Merlin Oracle"
+requires-python = ">=3.10"
+
+[project.scripts]
+oracle = "oracle.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["oracle*"]

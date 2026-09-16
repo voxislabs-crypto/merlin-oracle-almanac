@@ -1,0 +1,23 @@
+{
+  "name": "merlin-oracle-almanac",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Merlin Oracle: a private offline almanac machine for investigating time.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "format": "prettier --write app.js server.mjs oracle/swiss-ephemeris.mjs styles.css",
+    "format:check": "prettier --check app.js server.mjs oracle/swiss-ephemeris.mjs styles.css",
+    "test": "python -m unittest discover -s tests -v"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.7"
+  },
+  "dependencies": {
+    "sweph": "^2.10.3-8"
+  }
+}

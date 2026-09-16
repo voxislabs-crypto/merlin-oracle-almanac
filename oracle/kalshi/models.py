@@ -55,6 +55,15 @@ class Observation:
     yes_ask: float | None = None
     volume: float | None = None
     open_interest: float | None = None
+    sky_signal: float | None = None
+    sky_aspect: str | None = None
+    sky_orb: float | None = None
+    sky_direction: str | None = None
+    sky_onset: str | None = None
+    sky_peak: str | None = None
+    sky_duration_hours: float | None = None
+    astronomy_version: str | None = None
+    timetrak_version: str | None = None
 
     @property
     def natural_key(self) -> tuple[str, str]:
