@@ -399,11 +399,15 @@ function inspectTrainer(index) {
   $("#selected-detail").innerHTML =
     `<div class="inspector-grid"><span>DATE</span><b>${o.date}</b><span>MARKET</span><b>${o.ticker}</b><span>BEFORE</span><b>${o.price}¢</b><span>CHANGE</span><b class="${o.change < 0 ? "negative" : "positive"}">${o.change > 0 ? "+" : ""}${o.change}¢</b><span>VOLUME INDEX</span><b>${o.volume}</b><span>OUTCOME</span><b>${o.outcome}</b></div>`;
 }
+function normalizeMarketName(value) {
+  return String(value || "").trim().toLowerCase();
+}
 function filteredTrainerObservations() {
-  const market = $("#trainer-market")?.value || "all";
-  return trainerObservations.filter(
-    (observation) => market === "all" || observation.market === market,
-  );
+  const selectedMarket = normalizeMarketName($("#trainer-market")?.value || "all");
+  return trainerObservations.filter((observation) => {
+    if (selectedMarket === "all") return true;
+    return normalizeMarketName(observation.market) === selectedMarket;
+  });
 }
 function periodFor(date) {
   const year = Number(date.slice(0, 4));
