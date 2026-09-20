@@ -5,19 +5,27 @@ from pathlib import Path
 
 from oracle.kalshi.database import KalshiDatabase
 from oracle.kalshi.importer import KalshiImporter
+from oracle.kalshi.client import candle_period_interval
 from oracle.astronomy import ASTRONOMY_VERSION, calculate_state
 from oracle.timetrak import TIMETRAK_VERSION, calculate_signal
 
 
 class FakeClient:
     def market(self, ticker):
-        return {"market": {"ticker": ticker, "title": "Test market", "created_time": "2025-01-01T00:00:00Z", "status": "closed", "result": "yes", "question": "Will it happen?", "rules": "Official source determines settlement.", "settlement_source": "NWS Daily Climate Report"}}
+        return {"market": {"ticker": ticker, "title": "Test market", "created_time": "2025-01-01T00:00:00Z", "open_time": "2025-01-01T00:00:00Z", "close_time": "2025-01-01T02:00:00Z", "status": "closed", "result": "yes", "question": "Will it happen?", "rules": "Official source determines settlement.", "settlement_source": "NWS Daily Climate Report"}}
 
-    def candlesticks(self, ticker, start_ts=None, end_ts=None):
-        return {"candlesticks": [{"end_period_ts": 1735689660, "yes_price": 42, "no_price": 58, "volume": 12}, {"end_period_ts": 1735689660, "yes_price": 42, "no_price": 58, "volume": 12}]}
+    def candlesticks(self, ticker, start_ts=None, end_ts=None, period_interval=60, series_ticker=None):
+        return {"candlesticks": [{"end_period_ts": 1735689660, "yes_price": 42, "no_price": 58, "volume": 12}, {"end_period_ts": 1735689660, "price": {"close_dollars": "0.4200"}, "yes_bid": {"close_dollars": "0.4100"}, "yes_ask": {"close_dollars": "0.4300"}, "volume_fp": "12.00"}]}
 
 
 class KalshiImportTests(unittest.TestCase):
+    def test_long_windows_use_daily_candles_under_kalshi_cap(self):
+        hour = 60 * 60
+        day = 24 * hour
+        self.assertEqual(candle_period_interval(0, hour), 60)
+        self.assertEqual(candle_period_interval(0, 40 * day), 60)
+        self.assertEqual(candle_period_interval(0, 310 * day), 1440)
+
     def test_approximate_astronomy_is_deterministic_and_versioned(self):
         first = calculate_state("2000-01-01T12:00:00Z")
         second = calculate_state("2000-01-01T12:00:00Z")

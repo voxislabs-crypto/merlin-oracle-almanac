@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "store": "sqlite",
+  "database": "data/kalshi.db",
+  "principle": "Raw world observations are stored separately from Oracle interpretations. A later TimeTrak version must be able to replay the same history.",
+  "sources": [
+    {
+      "id": "kalshi",
+      "name": "Kalshi",
+      "type": "prediction_market",
+      "status": "live",
+      "adapter": "oracle.kalshi",
+      "capabilities": ["browse", "import", "candlesticks"]
+    },
+    {
+      "id": "polymarket",
+      "name": "Polymarket",
+      "type": "prediction_market",
+      "status": "search",
+      "adapter": "gamma-api.polymarket.com",
+      "capabilities": ["search"]
+    },
+    {
+      "id": "metaculus",
+      "name": "Metaculus",
+      "type": "forecasting",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": []
+    },
+    {
+      "id": "manifold",
+      "name": "Manifold",
+      "type": "prediction_market",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": []
+    },
+    {
+      "id": "fred",
+      "name": "FRED",
+      "type": "economic",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": []
+    },
+    {
+      "id": "noaa",
+      "name": "NOAA",
+      "type": "weather",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": []
+    },
+    {
+      "id": "news",
+      "name": "News / RSS",
+      "type": "events",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": []
+    },
+    {
+      "id": "binance",
+      "name": "Binance",
+      "type": "crypto_market",
+      "status": "live",
+      "adapter": "oracle.crypto",
+      "capabilities": ["ohlcv", "spread", "features"]
+    },
+    {
+      "id": "coinbase",
+      "name": "Coinbase",
+      "type": "crypto_market",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": ["ohlcv"]
+    },
+    {
+      "id": "kraken",
+      "name": "Kraken",
+      "type": "crypto_market",
+      "status": "planned",
+      "adapter": null,
+      "capabilities": ["ohlcv"]
+    },
+    {
+      "id": "cfbenchmarks",
+      "name": "CF Benchmarks",
+      "type": "settlement_index",
+      "status": "live",
+      "adapter": "oracle.crypto.index_import",
+      "capabilities": ["index", "spread"]
+    },
+    {
+      "id": "merlin",
+      "name": "Merlin engine",
+      "type": "astronomical",
+      "status": "live",
+      "adapter": "/api/engine",
+      "capabilities": ["natal", "transits"]
+    }
+  ],
+  "seriesPresets": [
+    { "id": "KXBTCY", "label": "BTC yearly" },
+    { "id": "KXBTCMAXY", "label": "BTC high" },
+    { "id": "KXBTCMINY", "label": "BTC low" },
+    { "id": "KXBTC", "label": "BTC hourly range" },
+    { "id": "KXBTCD", "label": "BTC hourly" },
+    { "id": "KXBTC15M", "label": "BTC 15m" },
+    { "id": "KXETHY", "label": "ETH yearly" },
+    { "id": "KXETHMAXY", "label": "ETH high" },
+    { "id": "KXETHMINY", "label": "ETH low" },
+    { "id": "KXETH", "label": "ETH hourly range" },
+    { "id": "KXETHD", "label": "ETH hourly" },
+    { "id": "KXETH15M", "label": "ETH 15m" },
+    { "id": "KXFED", "label": "Fed" },
+    { "id": "KXCPI", "label": "CPI" }
+  ]
+}

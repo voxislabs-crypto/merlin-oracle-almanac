@@ -16,6 +16,36 @@ def utc_timestamp(value: Any) -> str | None:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def unix_seconds(value: Any) -> int | None:
+    stamp = utc_timestamp(value)
+    if stamp is None:
+        return None
+    return int(datetime.fromisoformat(stamp).timestamp())
+
+
+def price_cents(value: Any) -> float | None:
+    """Normalize Kalshi dollars or legacy cents into contract cents."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        for key in (
+            "close_dollars",
+            "close",
+            "mean_dollars",
+            "mean",
+            "open_dollars",
+            "open",
+            "yes_price",
+        ):
+            if value.get(key) not in (None, ""):
+                return price_cents(value[key])
+        return None
+    number = float(value)
+    if 0 <= number <= 1.5:
+        return round(number * 100.0, 4)
+    return number
+
+
 @dataclass(frozen=True)
 class Market:
     ticker: str
@@ -42,7 +72,7 @@ class Market:
             created_time=utc_timestamp(payload.get("created_time")),
             open_time=utc_timestamp(payload.get("open_time")),
             close_time=utc_timestamp(payload.get("close_time")),
-            settlement_time=utc_timestamp(payload.get("settlement_time")),
+            settlement_time=utc_timestamp(payload.get("settlement_time") or payload.get("close_time")),
             status=payload.get("status"),
             rules=payload.get("rules_primary") or payload.get("rules"),
             settlement_source=payload.get("settlement_source") or payload.get("official_source"),

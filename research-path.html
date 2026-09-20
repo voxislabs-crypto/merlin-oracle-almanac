@@ -1,35 +1,478 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Almanac research path</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Merlin Oracle · Research Engine Path</title>
   <style>
-    body { font-family: Georgia, serif; background: #0b1220; color: #e8e4d8; max-width: 820px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.5; }
-    h1, h2 { color: #e6c56a; }
-    table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
-    th, td { border: 1px solid #3a4660; padding: 0.5rem 0.6rem; vertical-align: top; }
-    th { background: #162033; }
-    code { color: #8fd3c4; }
-    .rule { border-left: 3px solid #e6c56a; padding-left: 1rem; }
+    :root {
+      --ink: #080a10;
+      --panel: #10131c;
+      --panel-2: #151925;
+      --line: #2a2d38;
+      --ivory: #e9e4d6;
+      --muted: #858594;
+      --gold: #c9a35b;
+      --gold-bright: #eed18a;
+      --done: #6d8f6a;
+      --next: #c9a35b;
+      --later: #5c6378;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--ink);
+      color: var(--ivory);
+      font-family: "Space Mono", "Courier New", monospace;
+      font-size: 12px;
+      letter-spacing: 0.03em;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 36px 28px 64px; }
+    .eyebrow { color: var(--gold); font-size: 10px; letter-spacing: 0.22em; }
+    h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 600;
+      font-size: 42px;
+      margin: 8px 0 6px;
+      letter-spacing: 0.02em;
+    }
+    h1 span { color: var(--gold); }
+    .lede { color: var(--muted); max-width: 720px; line-height: 1.7; margin-bottom: 28px; }
+    .rule { height: 1px; background: var(--line); margin: 28px 0; }
+    .north {
+      border: 1px solid var(--gold);
+      background: linear-gradient(180deg, #1a160e, var(--panel));
+      padding: 18px 22px;
+      display: grid;
+      gap: 6px;
+    }
+    .north b { color: var(--gold-bright); font-size: 15px; font-weight: 400; }
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 18px 0 8px; color: var(--muted); font-size: 10px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: middle; }
+    .done-key { background: var(--done); }
+    .next-key { background: var(--next); }
+    .later-key { background: var(--later); }
+    h2 {
+      font-family: Georgia, serif;
+      font-size: 22px;
+      font-weight: 600;
+      margin: 8px 0 14px;
+    }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 120px 1fr;
+      gap: 0;
+      align-items: stretch;
+    }
+    .col {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 18px;
+    }
+    .col.kalshi { border-color: #3d4a3c; }
+    .col.binance { border-color: #4a3d28; }
+    .col h3 { margin: 0 0 4px; color: var(--gold); font-size: 11px; letter-spacing: 0.16em; font-weight: 400; }
+    .col h4 { margin: 0 0 12px; font-family: Georgia, serif; font-size: 22px; font-weight: 600; }
+    .col ul { margin: 0; padding: 0; list-style: none; }
+    .col li { padding: 7px 0; border-top: 1px solid var(--line); color: #cfc9b8; }
+    .col .job { color: var(--muted); font-size: 11px; line-height: 1.6; margin-bottom: 14px; }
+    .gate {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      color: var(--gold);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+    }
+    .gate .diamond {
+      width: 86px;
+      height: 86px;
+      border: 1px solid var(--gold);
+      transform: rotate(45deg);
+      display: grid;
+      place-items: center;
+      background: #16110a;
+    }
+    .gate .diamond span {
+      transform: rotate(-45deg);
+      display: block;
+      width: 70px;
+      line-height: 1.3;
+    }
+    .join {
+      margin-top: 0;
+      border: 1px solid var(--gold);
+      border-top: none;
+      background: #12100b;
+      padding: 16px 22px;
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 16px;
+      align-items: center;
+    }
+    .join strong { color: var(--gold-bright); font-weight: 400; }
+    .join p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .stack { display: grid; gap: 10px; margin-top: 22px; }
+    .node {
+      display: grid;
+      grid-template-columns: 92px 1fr 110px;
+      gap: 16px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      padding: 14px 16px;
+    }
+    .node.now { border-color: #4a3d28; }
+    .node.built { border-color: #2e3a2d; }
+    .node.wait { opacity: 0.78; }
+    .tag {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      color: var(--gold);
+    }
+    .tag.done { color: var(--done); }
+    .tag.later { color: var(--later); }
+    .node h3 { margin: 0 0 4px; font-size: 14px; font-weight: 400; }
+    .node p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .arrow {
+      text-align: center;
+      color: var(--gold);
+      letter-spacing: 0.4em;
+      font-size: 10px;
+      padding: 2px 0;
+    }
+    .phases {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .phase {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      min-height: 210px;
+    }
+    .phase.current { border-color: var(--gold); }
+    .phase.complete { border-color: #2e3a2d; }
+    .phase small { color: var(--gold); letter-spacing: 0.16em; font-size: 10px; }
+    .phase h3 { font-family: Georgia, serif; font-size: 18px; margin: 8px 0 10px; }
+    .phase li { margin: 0 0 7px; color: #cfc9b8; }
+    .phase ul { margin: 0; padding-left: 16px; }
+    .note {
+      margin-top: 22px;
+      border-left: 2px solid var(--gold);
+      padding: 4px 0 4px 16px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .grid-2, .grid-3, .grid-6 {
+      display: grid;
+      gap: 12px;
+    }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .grid-6 { grid-template-columns: repeat(6, 1fr); }
+    .card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+    }
+    .card h3 { margin: 0 0 8px; color: var(--gold); font-size: 11px; letter-spacing: 0.16em; font-weight: 400; }
+    .card h4 { margin: 0 0 10px; font-family: Georgia, serif; font-size: 18px; }
+    .card p, .card li { color: #cfc9b8; line-height: 1.55; }
+    .card ul { margin: 0; padding-left: 16px; }
+    .card.private { border-color: #4a3030; }
+    .tick {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+    .tick b { display: block; color: var(--gold-bright); font-weight: 400; margin-bottom: 4px; font-size: 12px; }
+    .tick.settle { border-color: var(--gold); }
+    .vector {
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.7;
+      color: #cfc9b8;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .layers { display: flex; flex-wrap: wrap; gap: 8px; }
+    .layers span {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      letter-spacing: 0.12em;
+      font-size: 10px;
+      color: var(--ivory);
+    }
+    @media (max-width: 860px) {
+      .split, .join, .node, .phases, .grid-2, .grid-3, .grid-6 { grid-template-columns: 1fr; }
+      .gate { padding: 18px 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>The path</h1>
-  <p>Kalshi is settlement truth. Binance is the live chart. The spread between them is the gate.</p>
-  <p class="rule">Do not start by asking why a trade won. Reconstruct everything that was knowable at the exact moment of entry. Settlement stays out of the feature vector until after the reconstruction is frozen.</p>
-  <h2>Two jobs, two feeds</h2>
-  <table>
-    <tr><th></th><th>Kalshi (truth)</th><th>Binance (sight)</th></tr>
-    <tr><td>Job</td><td>Contract, strike, expiry, YES/NO, fees, settlement index (BRTI for BTC)</td><td>Fine candlesticks, swings, Fibonacci, RSI/MACD/ATR</td></tr>
-    <tr><td>Already in the Almanac</td><td>Yes — client, importer, SQLite vault, UTC, settlements</td><td>Milestone 1 — public klines + spread table</td></tr>
-    <tr><td>What it is not</td><td>A professional chart</td><td>Kalshi’s settlement price</td></tr>
-  </table>
-  <h2>Build order</h2>
-  <ol>
-    <li>Feed + gate — Binance klines, truth ticks, spread snapshots.</li>
-    <li>Sight — RSI, MACD, ATR, EMA, VWAP, swings, Fibonacci.</li>
-    <li>Freeze T — T-60 through T. No settlement in that vector.</li>
-    <li>Control group — same setup, different outcome. Then Model A / B / C. Paper only after that.</li>
-  </ol>
+  <div class="wrap">
+    <p class="eyebrow">FIELD MAP · PUBLIC DATA ONLY · NO PRIVATE ACCOUNTS</p>
+    <h1>THE <span>PATH</span></h1>
+    <p class="lede">Do not start by asking why a trade won. Reconstruct everything that was knowable at the exact moment of entry. Kalshi is settlement truth. Binance is the live chart. The spread between them is the gate.</p>
+
+    <div class="north">
+      <span class="eyebrow">NORTH STAR</span>
+      <b>“What did he know at 2:17 PM that made the 2:30 PM target attractive?”</b>
+    </div>
+
+    <div class="legend">
+      <span><i class="done-key"></i> STANDING NOW</span>
+      <span><i class="next-key"></i> NEXT BRICK</span>
+      <span><i class="later-key"></i> AFTER THE SNAPSHOTS WORK</span>
+    </div>
+
+    <div class="rule"></div>
+    <h2>1 · Two jobs, two feeds</h2>
+    <div class="split">
+      <div class="col kalshi">
+        <h3>SOURCE A · TRUTH</h3>
+        <h4>Kalshi</h4>
+        <p class="job">Contract, strike, expiry, YES/NO, settlement index, fees, public activity. Coarse candles are stored, but they are not the pattern engine.</p>
+        <ul>
+          <li>Market / event / contract ticker</li>
+          <li>YES / NO price, bid, ask, volume, OI</li>
+          <li>Expiration and settlement result</li>
+          <li>Settlement rules and index</li>
+          <li>Public trade timestamps</li>
+        </ul>
+      </div>
+      <div class="gate">
+        <div class="diamond"><span>SPREAD<br>MONITOR</span></div>
+        <div>IF THE GAP<br>IS TOO WIDE<br>THE MODEL<br>GOES QUIET</div>
+      </div>
+      <div class="col binance">
+        <h3>SOURCE B · SIGHT</h3>
+        <h4>Binance</h4>
+        <p class="job">Fine candlesticks and the TA/Fibonacci math Kalshi’s chart cannot support. This is a hypothesis about the underlying, not Kalshi’s settlement price.</p>
+        <ul>
+          <li>OHLCV at 1m / 5m / 15m / 1h</li>
+          <li>Swing high / swing low</li>
+          <li>Candlestick structures</li>
+          <li>RSI, MACD, ATR, EMA, VWAP</li>
+          <li>Fibonacci retrace / extension</li>
+        </ul>
+      </div>
+    </div>
+    <div class="join">
+      <strong>JOIN RULE</strong>
+      <p>A Binance pattern is a hypothesis about where BTC is heading. Kalshi’s contract rules decide what actually settles. Never train on one price and fire on the other without checking the gap.</p>
+    </div>
+
+    <div class="rule"></div>
+    <h2>2 · What the machine does with both</h2>
+    <div class="stack">
+      <div class="node built">
+        <span class="tag done">PHASE 0 · LIVE</span>
+        <div>
+          <h3>Kalshi vault</h3>
+          <p>Public markets, observations, settlements, UTC timestamps, raw payloads, time-split paper backtest, Merlin kept separate.</p>
+        </div>
+        <span>data/kalshi.db</span>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node now">
+        <span class="tag">PHASE 1 · NEXT</span>
+        <div>
+          <h3>Binance candle ingest + spread table</h3>
+          <p>Store OHLCV beside Kalshi rows. Compute Binance price vs Kalshi index at the same UTC second. This is the first missing brick.</p>
+        </div>
+        <span>NEW TABLES</span>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node now">
+        <span class="tag">PHASE 2</span>
+        <div>
+          <h3>Technical analysis + Fibonacci</h3>
+          <p>Indicators and swing selection run on Binance candles. Strike, target, and time-to-expiry come from Kalshi. Fibonacci is a reconstruction of what the trader appears to be using, not a belief that the ratios predict.</p>
+        </div>
+        <span>FEATURE LAYER</span>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node now">
+        <span class="tag">PHASE 3</span>
+        <div>
+          <h3>Entry snapshots (anti-hindsight)</h3>
+          <p>For each public trade: freeze the market-state vector at T-60, T-30, T-15, T-10, T-5, T-1, T. No settlement result in the feature vector. That is the reconstruction engine.</p>
+        </div>
+        <span>TRADE_ID @ T</span>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node wait">
+        <span class="tag later">PHASE 4 · LATER</span>
+        <div>
+          <h3>Control group + validation</h3>
+          <p>Same setup, different outcome. Manufacture the losses the highlight reels hide. Then Model A (TA), Model B (TA + structure), Model C (plus Merlin). Paper trade only after that.</p>
+        </div>
+        <span>DO NOT SKIP</span>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+    <h2>3 · Build order for the next two intense days</h2>
+    <div class="phases">
+      <div class="phase complete">
+        <small>ALREADY STANDING</small>
+        <h3>Do not rebuild</h3>
+        <ul>
+          <li>Kalshi client + importer</li>
+          <li>SQLite vault + UTC</li>
+          <li>Settlement results</li>
+          <li>Merlin as its own layer</li>
+          <li>Time-split backtester</li>
+        </ul>
+      </div>
+      <div class="phase current">
+        <small>MILESTONE 1</small>
+        <h3>Feed + gate</h3>
+        <ul>
+          <li>Binance public klines</li>
+          <li>candles table</li>
+          <li>spread_snapshots table</li>
+          <li>Quiet if gap &gt; threshold</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <small>MILESTONE 2</small>
+        <h3>Sight</h3>
+        <ul>
+          <li>RSI / MACD / ATR / EMA</li>
+          <li>Swing high / low</li>
+          <li>Fibonacci from those swings</li>
+          <li>Candlestick labels</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <small>MILESTONE 3</small>
+        <h3>Freeze T</h3>
+        <ul>
+          <li>trade_reconstructions</li>
+          <li>T-minus snapshots</li>
+          <li>Human-readable dossier</li>
+          <li>Then control group</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="note">Direction: finish Milestone 1 before touching Fibonacci. The tool is just math. Without aligned Binance candles and a Kalshi timestamp, the math is guessing. The first question is still not “why he won.” It is “what was on the chart at T.”</p>
+
+    <div class="rule"></div>
+    <h2>4 · Public data only</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>PUBLIC</h3>
+        <h4>Treat as data</h4>
+        <ul>
+          <li>Market prices, order books, contract info</li>
+          <li>Settlement data and public timestamps</li>
+          <li>Publicly displayed trade / activity</li>
+          <li>Public historical market information</li>
+          <li>Posts / screenshots the user supplies</li>
+        </ul>
+      </div>
+      <div class="card private">
+        <h3>PRIVATE · NEVER PURSUE</h3>
+        <h4>Refuse and stop</h4>
+        <ul>
+          <li>Account credentials and private API keys</li>
+          <li>Private account history</li>
+          <li>Non-public personal information</li>
+          <li>Unauthorized access of any kind</li>
+          <li>Anything intentionally hidden from public access</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+    <h2>5 · Source C and the reconstruction vector</h2>
+    <div class="grid-3">
+      <div class="card">
+        <h3>SOURCE C · OPTIONAL</h3>
+        <h4>Cross-check exchanges</h4>
+        <p>Coinbase, Kraken, TradingView-derived data, CF Benchmarks, other legitimate feeds. Used to test whether a signal exists across the broader market, not only on Binance.</p>
+      </div>
+      <div class="card">
+        <h3>FEATURE VECTOR AT T</h3>
+        <h4>Knowable at entry</h4>
+        <pre class="vector">TRADE_ID  TIMESTAMP  CONTRACT
+TARGET  EXPIRATION  BTC_PRICE
+DISTANCE_TO_TARGET
+TIME_TO_EXPIRATION
+FIB 23.6 / 38.2 / 50 / 61.8 / 78.6
+RSI  MACD  ATR  EMA 9/21/50  VWAP
+VOLUME  VOLATILITY
+TREND_STATE  MARKET_STRUCTURE
+KALSHI YES / NO  IMPLIED PROB</pre>
+      </div>
+      <div class="card">
+        <h3>SCORED LATER</h3>
+        <h4>Not in the decision vector</h4>
+        <p>FINAL_RESULT and settlement live in their own columns. They may score a reconstruction after the fact. They must never leak into the features used at timestamp T.</p>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+    <h2>6 · Temporal freeze</h2>
+    <div class="grid-6">
+      <div class="tick"><b>T-60</b>minutes</div>
+      <div class="tick"><b>T-30</b>minutes</div>
+      <div class="tick"><b>T-15</b>minutes</div>
+      <div class="tick"><b>T-10</b>minutes</div>
+      <div class="tick"><b>T-5</b>minutes</div>
+      <div class="tick"><b>T-1</b>minute</div>
+      <div class="tick settle"><b>T</b>entry · freeze</div>
+      <div class="tick"><b>T+1</b>minute</div>
+      <div class="tick"><b>T+5</b>minutes</div>
+      <div class="tick"><b>T+15</b>minutes</div>
+      <div class="tick settle"><b>SETTLE</b>after, never at T</div>
+      <div class="tick"><b>UTC</b>internal clock</div>
+    </div>
+
+    <div class="rule"></div>
+    <h2>7 · Discovery, controls, Merlin</h2>
+    <div class="grid-3">
+      <div class="card">
+        <h3>PATTERN DISCOVERY</h3>
+        <h4>Winners vs the same setup that failed</h4>
+        <p>Do not hunt correlations that confirm the theory. If public profiles show no losses, manufacture the control group: every matching setup where price did not cooperate. Those non-trades are the failed trades.</p>
+      </div>
+      <div class="card">
+        <h3>VALIDATION</h3>
+        <h4>A few wins are not a method</h4>
+        <p>Sample size, win/fail rate, mean and median return, max drawdown, variance, confidence intervals, out-of-sample, timeframe and regime sensitivity. Paper trade only after that.</p>
+      </div>
+      <div class="card">
+        <h3>MODELS A / B / C</h3>
+        <h4>Merlin stays experimental</h4>
+        <p>A: technical only. B: technical + market structure. C: B + Merlin sky features. Never silently treat astrology as established evidence. Compare whether the extra layer changes performance.</p>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+    <h2>8 · What every sentence must be labeled</h2>
+    <div class="layers">
+      <span>OBSERVATION</span>
+      <span>CALCULATION</span>
+      <span>MODEL OUTPUT</span>
+      <span>HYPOTHESIS</span>
+      <span>EXPERIMENTAL SIGNAL</span>
+      <span>ACTUAL RESULT</span>
+    </div>
+    <p class="note">Charter: RESEARCH-ENGINE.md. Almanac screen: Research engine. Probability gap (market-implied vs model) is a research signal, not a trading instruction. Optimize for understanding, not profit, until the three questions are answered: what is the trader doing, does it repeat, does it hold out of sample.</p>
+  </div>
 </body>
 </html>

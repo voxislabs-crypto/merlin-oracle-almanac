@@ -1,15 +1,44 @@
 setTimeout(() => {
+  if ($('[data-action="import-candles"]'))
+    $('[data-action="import-candles"]').addEventListener(
+      "click",
+      importBinanceCandles,
+    );
+  if ($("#index-import"))
+    $("#index-import").addEventListener("change", importIndexFile);
+  if ($("#feed-symbol"))
+    $("#feed-symbol").addEventListener("change", () =>
+      applyVaultStatus(lastVaultStatus),
+    );
+  if ($("#feed-symbol"))
+    $("#feed-symbol").addEventListener("input", () =>
+      applyVaultStatus(lastVaultStatus),
+    );
+  if ($('[data-action="freeze-t"]'))
+    $('[data-action="freeze-t"]').addEventListener("click", freezeEntry);
   if ($('[data-action="vault-import"]'))
     $('[data-action="vault-import"]').addEventListener("click", runVaultImport);
-  if ($('[data-action="vault-command"]'))
-    $('[data-action="vault-command"]').addEventListener(
+  if ($('[data-action="vault-list"]'))
+    $('[data-action="vault-list"]').addEventListener(
       "click",
-      copyVaultCommand,
+      listHarvestMarkets,
     );
-  if ($("#vault-import-file"))
-    $("#vault-import-file").addEventListener("change", vaultImportLocal);
+  if ($('[data-action="vault-refresh-status"]'))
+    $('[data-action="vault-refresh-status"]').addEventListener(
+      "click",
+      syncVaultFromApi,
+    );
+  if ($("#vault-series"))
+    $("#vault-series").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") listHarvestMarkets();
+    });
+  if ($("#vault-ticker"))
+    $("#vault-ticker").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") runVaultImport();
+    });
 }, 0);
 setTimeout(syncVaultFromApi, 100);
+setTimeout(loadHarvesterSources, 120);
 setTimeout(() => {
   if ($('[data-action="run-trainer"]'))
     $('[data-action="run-trainer"]').addEventListener("click", runTrainer);
@@ -87,6 +116,31 @@ function ensureSeededAlmanacEntry() {
     persist();
   }
 }
+if (!Array.isArray(store.charts)) store.charts = [];
+store.charts.forEach((chart) => {
+  if (!chart.id) chart.id = crypto.randomUUID();
+});
+let harvestState = {
+  sources: [],
+  series: [],
+  markets: [],
+  cursor: null,
+  selected: null,
+  dossier: null,
+};
+let engineStatus = {
+  connected: false,
+  engine: "http://127.0.0.1:3000",
+  error: "Checking Merlin engine…",
+};
+let trakState = {
+  chartId: null,
+  status: "idle",
+  error: null,
+  source: null,
+  windows: [],
+  transits: [],
+};
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const candidates = [
@@ -140,6 +194,13 @@ function updateCounts() {
       2,
       "0",
     );
+  const trakCount = trakState.windows.length;
+  if ($("#metric-traks"))
+    $("#metric-traks").textContent = String(trakCount).padStart(2, "0");
+  if ($("#metric-traks-note"))
+    $("#metric-traks-note").textContent = engineStatus.connected
+      ? "from Merlin engine"
+      : "engine offline";
 }
 function toast(message) {
   const el = $("#toast");
@@ -163,51 +224,281 @@ function switchView(view) {
   $$(".nav-item").forEach((el) =>
     el.classList.toggle("active", el.dataset.view === view),
   );
-  $("#view-label").textContent = view.toUpperCase();
+  $("#view-label").textContent =
+    view === "engine" ? "RESEARCH ENGINE" : view.toUpperCase();
   renderAll();
+  if (view === "timetraks") loadTimeTraks();
+  if (view === "vault") {
+    loadHarvesterSources();
+    if (!harvestState.markets.length) listHarvestMarkets();
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function natalPayload(chart) {
+  const lat = Number(chart.lat);
+  const lon = Number(chart.lon);
+  const timezoneOffset = Number(chart.timezoneOffset);
+  return {
+    birthDate: chart.date,
+    birthTime: chart.time || "12:00",
+    lat,
+    lon,
+    timezoneOffset: Number.isFinite(timezoneOffset)
+      ? timezoneOffset
+      : undefined,
+  };
+}
+function chartIsEngineReady(chart) {
+  return Boolean(
+    chart?.date &&
+    Number.isFinite(Number(chart.lat)) &&
+    Number.isFinite(Number(chart.lon)),
+  );
+}
+function selectedChart() {
+  const select = $("#trak-chart");
+  const id = select?.value || trakState.chartId || store.charts[0]?.id;
+  return (
+    store.charts.find((chart) => chart.id === id) || store.charts[0] || null
+  );
+}
+function fillChartSelects() {
+  const selects = [$("#trak-chart"), $("#historical-chart")].filter(Boolean);
+  selects.forEach((select) => {
+    const previous = select.value || trakState.chartId;
+    if (!store.charts.length) {
+      select.innerHTML = "<option value=''>No reference charts</option>";
+      return;
+    }
+    select.innerHTML = store.charts
+      .map(
+        (chart) =>
+          `<option value="${escapeHtml(chart.id)}">${escapeHtml(chart.name)} / ${escapeHtml(chart.date || "undated")}</option>`,
+      )
+      .join("");
+    if (previous && store.charts.some((chart) => chart.id === previous)) {
+      select.value = previous;
+    }
+  });
+}
+function formatWindowRange(start, end) {
+  const startDate = start ? new Date(start) : null;
+  const endDate = end ? new Date(end) : null;
+  if (!startDate || Number.isNaN(startDate.getTime()))
+    return "Window not dated";
+  const opts = { month: "short", day: "2-digit", year: "numeric" };
+  const left = startDate.toLocaleDateString(undefined, opts).toUpperCase();
+  if (!endDate || Number.isNaN(endDate.getTime())) return left;
+  return `${left} — ${endDate.toLocaleDateString(undefined, opts).toUpperCase()}`;
+}
+function paintEngineChrome() {
+  const connected = engineStatus.connected;
+  const detail = connected ? "LIVE" : "DOWN";
+  const pill = connected ? "ENGINE LIVE" : "ENGINE DOWN";
+  const ephemeris = connected
+    ? "MERLIN ENGINE / SWISS"
+    : "MERLIN ENGINE / UNREACHABLE";
+  if ($("#engine-status-detail"))
+    $("#engine-status-detail").textContent = detail;
+  if ($("#engine-dot")) {
+    $("#engine-dot").classList.toggle("down", !connected);
+    $("#engine-dot").classList.toggle("wait", false);
+  }
+  if ($("#engine-mode-pill")) {
+    $("#engine-mode-pill").className =
+      `offline-pill${connected ? "" : " down"}`;
+    $("#engine-mode-pill").innerHTML = `<i></i> ${pill}`;
+  }
+  if ($("#ephemeris-label")) $("#ephemeris-label").textContent = ephemeris;
+  if ($("#sky-live-mark")) {
+    $("#sky-live-mark").className = `live-mark${connected ? "" : " down"}`;
+    $("#sky-live-mark").innerHTML = connected
+      ? "<i></i> ENGINE"
+      : "<i></i> DOWN";
+  }
+  if ($("#trak-engine-badge"))
+    $("#trak-engine-badge").textContent = connected
+      ? `ENGINE · ${engineStatus.engine.replace("http://", "")}`
+      : "ENGINE · DOWN";
+}
+async function refreshEngineStatus() {
+  try {
+    const response = await fetch("/api/engine/status");
+    const data = await response.json();
+    engineStatus = {
+      connected: Boolean(data.connected),
+      engine: data.engine || engineStatus.engine,
+      error: data.error || null,
+    };
+  } catch {
+    engineStatus = {
+      connected: false,
+      engine: engineStatus.engine,
+      error: "Almanac server could not reach the Merlin engine proxy.",
+    };
+  }
+  paintEngineChrome();
+  updateCounts();
+  return engineStatus.connected;
 }
 function renderCharts() {
   const el = $("#chart-list");
   if (!el) return;
+  fillChartSelects();
   if (!store.charts.length) {
     el.innerHTML =
-      '<div class="empty-state"><b>No fixed points yet.</b>Create a chart to give the Oracle its first reference in time.</div>';
+      '<div class="empty-state"><b>No fixed points yet.</b>Create a chart. Merlin will calculate the natal before it is stored.</div>';
     return;
   }
   el.innerHTML = store.charts
-    .map(
-      (c) =>
-        `<article class="chart-card"><div class="chart-type">${c.type}<br><span>CHART</span></div><div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.description || "No description recorded.")}</p></div><div class="chart-date"><b>${c.date || "Undated"}</b><br>${escapeHtml(c.location || "Location not set")}</div></article>`,
-    )
+    .map((c) => {
+      const source = c.engine?.source || "NOT CALCULATED";
+      const rising = c.engine?.ascendant?.sign
+        ? `Rising ${c.engine.ascendant.sign}`
+        : c.location || "Location not set";
+      return `<article class="chart-card"><div class="chart-type">${escapeHtml(c.type || "CUSTOM")}<br><span>CHART</span></div><div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.description || "No description recorded.")}</p><small class="engine-source">${escapeHtml(String(source).toUpperCase())}</small></div><div class="chart-date"><b>${escapeHtml(c.date || "Undated")}</b><br>${escapeHtml(rising)}</div></article>`;
+    })
     .join("");
+}
+function renderTrakGauge() {
+  const gauge = $("#trak-gauge");
+  const value = $("#trak-gauge-value");
+  const copy = $("#trak-gauge-copy");
+  const kicker = $("#trak-gauge-kicker");
+  const peak = trakState.windows.reduce(
+    (best, window) =>
+      (Number(window.intensity) || 0) > (Number(best?.intensity) || 0)
+        ? window
+        : best,
+    null,
+  );
+  const intensity = Math.round(Number(peak?.intensity) || 0);
+  if (gauge) gauge.style.setProperty("--gauge", `${intensity}%`);
+  if (value) value.textContent = peak ? String(intensity) : "--";
+  if (kicker)
+    kicker.textContent = peak ? "MERLIN PEAK WINDOW" : "MERLIN WINDOW";
+  if (copy) {
+    if (trakState.status === "error") copy.textContent = trakState.error;
+    else if (!engineStatus.connected)
+      copy.textContent =
+        "Start Merlin with npm run dev in X:\\Merlin. This instrument will not invent a sky signal while the engine is down.";
+    else if (!store.charts.length)
+      copy.textContent =
+        "Create a reference chart with date, time, and coordinates. TimeTraks are Merlin transit windows against that natal.";
+    else if (peak)
+      copy.textContent = `${peak.title} · ${formatWindowRange(peak.startsAt, peak.endsAt)}. Source: ${trakState.source || "merlin-engine"}.`;
+    else
+      copy.textContent = "Merlin returned no transit windows for this chart.";
+  }
 }
 function renderTraks() {
   const el = $("#traks-container");
   if (!el) return;
-  const traks = [
-    [
-      "Mars △ Saturn",
-      store.charts[0]?.name || "Demo reference chart",
-      "MAR 18 — APR 04, 2025",
-      68,
-      "APPLYING",
-    ],
-    [
-      "Jupiter ☌ Sun",
-      store.charts[1]?.name || "Earth / equinox",
-      "APR 02 — APR 17, 2025",
-      51,
-      "SEPARATING",
-    ],
-    ["Venus □ Uranus", "Market cycle", "APR 21 — MAY 02, 2025", 32, "APPLYING"],
-  ];
-  el.innerHTML = traks
-    .map(
-      (t) =>
-        `<article class="trak-card"><div><span class="section-kicker">TIME WINDOW</span><h3>${t[0]}</h3><p>${escapeHtml(t[1])}</p></div><div><p>${t[2]}</p><div class="trak-bar"><i style="width:${t[3]}%"></i></div></div><div class="trak-meta"><b>${t[3]} / 100</b>${t[4]}<br>orb 1°42'</div></article>`,
-    )
+  fillChartSelects();
+  renderTrakGauge();
+  if (trakState.status === "loading") {
+    el.innerHTML =
+      '<div class="empty-state"><b>Asking Merlin…</b>Transit windows are calculated by the engine, not by this notebook.</div>';
+    return;
+  }
+  if (trakState.status === "error") {
+    el.innerHTML = `<div class="empty-state"><b>Merlin did not answer.</b>${escapeHtml(trakState.error || "Engine request failed.")}</div>`;
+    return;
+  }
+  if (!store.charts.length) {
+    el.innerHTML =
+      '<div class="empty-state"><b>No reference chart.</b>Create one so Merlin has a natal to transit against.</div>';
+    return;
+  }
+  if (!trakState.windows.length) {
+    el.innerHTML =
+      '<div class="empty-state"><b>No TimeTraks yet.</b>Choose a chart and ask Merlin. Demo windows are no longer shown.</div>';
+    return;
+  }
+  const chart = selectedChart();
+  el.innerHTML = trakState.windows
+    .map((window) => {
+      const intensity = Math.round(Number(window.intensity) || 0);
+      const phase = String(window.currentPhase || "building").toUpperCase();
+      const title = window.title || "Untitled window";
+      return `<article class="trak-card"><div><span class="section-kicker">TIME WINDOW</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(chart?.name || "Reference chart")}</p></div><div><p>${escapeHtml(formatWindowRange(window.startsAt, window.endsAt))}</p><div class="trak-bar"><i style="width:${intensity}%"></i></div></div><div class="trak-meta"><b>${intensity} / 100</b>${escapeHtml(phase)}<br>${escapeHtml(window.durationHours ? `${window.durationHours}h duration` : "Merlin window")}</div></article>`;
+    })
     .join("");
+}
+async function loadTimeTraks(force = false) {
+  const chart = selectedChart();
+  if (!chart) {
+    trakState = {
+      chartId: null,
+      status: "idle",
+      error: null,
+      source: null,
+      windows: [],
+      transits: [],
+    };
+    renderTraks();
+    updateCounts();
+    return;
+  }
+  if (
+    !force &&
+    trakState.chartId === chart.id &&
+    trakState.status === "ready"
+  ) {
+    renderTraks();
+    return;
+  }
+  if (!chartIsEngineReady(chart)) {
+    trakState = {
+      chartId: chart.id,
+      status: "error",
+      error:
+        "This chart is missing coordinates. Recreate it with latitude, longitude, and timezone so Merlin can calculate houses and transits.",
+      source: null,
+      windows: [],
+      transits: [],
+    };
+    renderTraks();
+    updateCounts();
+    return;
+  }
+  trakState = {
+    ...trakState,
+    chartId: chart.id,
+    status: "loading",
+    error: null,
+  };
+  renderTraks();
+  try {
+    const response = await fetch("/api/engine/transits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(natalPayload(chart)),
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) {
+      throw new Error(data.error || `Merlin returned ${response.status}`);
+    }
+    trakState = {
+      chartId: chart.id,
+      status: "ready",
+      error: null,
+      source: data.source || "merlin-engine",
+      windows: Array.isArray(data.windows) ? data.windows : [],
+      transits: Array.isArray(data.transits) ? data.transits : [],
+    };
+  } catch (error) {
+    trakState = {
+      chartId: chart.id,
+      status: "error",
+      error: error.message || "Merlin engine request failed.",
+      source: null,
+      windows: [],
+      transits: [],
+    };
+  }
+  renderTraks();
+  updateCounts();
 }
 function renderJournal() {
   const el = $("#journal-list");
@@ -529,31 +820,66 @@ function importTrainer(event) {
   };
   reader.readAsText(file);
 }
-function renderVaultStatus() {
-  const data = JSON.parse(
-    localStorage.getItem("merlin-oracle-vault") || "null",
-  ) || {
-    markets: 0,
-    observations: 0,
-    results: 0,
-    earliest_timestamp: null,
-    latest_timestamp: null,
+let lastVaultStatus = null;
+function gateLabel(data) {
+  const gate = data?.gate || {};
+  if (gate.quiet)
+    return `QUIET · ${String(gate.reason || "missing_reference").toUpperCase()}`;
+  return "OPEN";
+}
+function selectedPair(data) {
+  const symbol = ($("#feed-symbol")?.value || "BTCUSDT").trim().toUpperCase();
+  const pair = data?.pairs?.[symbol];
+  if (!pair) return data || {};
+  return {
+    ...data,
+    candles: pair.candles,
+    technical_features: pair.technical_features,
+    fibonacci_features: pair.fibonacci_features,
+    gate: pair.gate || data.gate,
   };
-  if ($("#vault-markets")) $("#vault-markets").textContent = data.markets;
+}
+function applyVaultStatus(data) {
+  if (!data) return;
+  lastVaultStatus = data;
+  const feed = selectedPair(data);
+  if ($("#vault-markets")) $("#vault-markets").textContent = data.markets ?? 0;
   if ($("#vault-observations"))
-    $("#vault-observations").textContent = data.observations;
-  if ($("#vault-results")) $("#vault-results").textContent = data.results;
+    $("#vault-observations").textContent = data.observations ?? 0;
+  if ($("#vault-results")) $("#vault-results").textContent = data.results ?? 0;
+  if ($("#vault-candles")) $("#vault-candles").textContent = data.candles ?? 0;
+  if ($("#vault-spreads")) $("#vault-spreads").textContent = data.spreads ?? 0;
+  if ($("#vault-features"))
+    $("#vault-features").textContent =
+      (data.technical_features ?? 0) + (data.fibonacci_features ?? 0);
+  if ($("#vault-gate")) $("#vault-gate").textContent = gateLabel(data);
+  if ($("#feed-candles")) $("#feed-candles").textContent = feed.candles ?? 0;
+  if ($("#feed-technical"))
+    $("#feed-technical").textContent = feed.technical_features ?? 0;
+  if ($("#feed-fibonacci"))
+    $("#feed-fibonacci").textContent = feed.fibonacci_features ?? 0;
+  if ($("#feed-gate")) $("#feed-gate").textContent = gateLabel(feed);
+  if ($("#vault-database"))
+    $("#vault-database").textContent = data.database || "LOCAL";
+  if ($("#vault-status-label"))
+    $("#vault-status-label").textContent = data.database || "LOCAL";
   if ($("#vault-range"))
     $("#vault-range").textContent =
       data.earliest_timestamp && data.latest_timestamp
-        ? `${data.earliest_timestamp.slice(0, 10)} → ${data.latest_timestamp.slice(0, 10)}`
+        ? `${String(data.earliest_timestamp).slice(0, 10)} → ${String(data.latest_timestamp).slice(0, 10)}`
         : "NO DATA";
+}
+function renderVaultStatus() {
+  applyVaultStatus(
+    JSON.parse(localStorage.getItem("merlin-oracle-vault") || "null"),
+  );
 }
 async function syncVaultFromApi() {
   try {
     const response = await fetch("/api/vault/status");
     if (!response.ok) return;
     const data = await response.json();
+    applyVaultStatus(data);
     if ($("#vault-markets")) $("#vault-markets").textContent = data.markets;
     if ($("#vault-observations"))
       $("#vault-observations").textContent = data.observations;
@@ -643,25 +969,342 @@ function vaultImportLocal(event) {
   };
   reader.readAsText(file);
 }
-function runVaultImport() {
-  const ticker = $("#vault-ticker").value.trim();
-  if (!ticker) {
-    toast("Enter one market ticker before importing.");
+function renderSourceStrip() {
+  const el = $("#source-strip");
+  if (!el) return;
+  if (!harvestState.sources.length) {
+    el.innerHTML = "";
     return;
   }
-  const command = `python oracle.py import ${ticker}`;
-  navigator.clipboard?.writeText(command);
-  $("#vault-status-label").textContent = "COMMAND READY · PYTHON";
-  $("#vault-progress-bar").style.width = "18%";
-  toast(
-    "Python import command copied. Run it locally to retrieve public data.",
+  el.innerHTML = harvestState.sources
+    .map(
+      (source) =>
+        `<button class="source-chip ${source.status}" type="button" data-source="${escapeHtml(source.id)}"><b>${escapeHtml(source.name)}</b><span>${escapeHtml(source.status)}</span></button>`,
+    )
+    .join("");
+  $$("#source-strip [data-source]").forEach((button) =>
+    button.addEventListener("click", () => {
+      if (button.dataset.source === "binance") {
+        switchView("engine");
+        importBinanceCandles();
+      }
+      if (button.dataset.source === "cfbenchmarks") {
+        switchView("engine");
+        $("#index-import")?.click();
+      }
+    }),
   );
 }
-function copyVaultCommand() {
-  const ticker = $("#vault-ticker").value.trim() || "MARKET_TICKER";
-  const command = `python oracle.py import ${ticker} --database data/kalshi.db`;
-  navigator.clipboard?.writeText(command);
-  toast("Import command copied to clipboard.");
+function renderSeriesChips() {
+  const el = $("#series-chips");
+  if (!el) return;
+  el.innerHTML = harvestState.series
+    .map(
+      (series) =>
+        `<button class="series-chip" type="button" data-series="${escapeHtml(series.id)}">${escapeHtml(series.label)}<small>${escapeHtml(series.id)}</small></button>`,
+    )
+    .join("");
+  $$(".series-chip").forEach((button) =>
+    button.addEventListener("click", () => {
+      $("#vault-series").value = button.dataset.series;
+      listHarvestMarkets();
+    }),
+  );
+}
+async function loadHarvesterSources() {
+  try {
+    const registry = await (await fetch("/api/harvester/sources")).json();
+    harvestState.sources = registry.sources || [];
+    harvestState.series = registry.seriesPresets || [];
+    renderSourceStrip();
+    renderSeriesChips();
+  } catch {
+    harvestState.sources = [];
+  }
+}
+function renderMarketList() {
+  const el = $("#market-list");
+  if (!el) return;
+  if (!harvestState.markets.length) {
+    el.innerHTML =
+      '<div class="empty-state"><b>No contracts listed.</b>Choose a series and list markets.</div>';
+    return;
+  }
+  el.innerHTML = harvestState.markets
+    .map((market) => {
+      const price =
+        market.last_price == null ? "—" : `${Math.round(market.last_price)}`;
+      return `<article class="market-row" data-ticker="${escapeHtml(market.ticker)}"><span class="market-ticker">${escapeHtml(market.ticker)}</span><span class="market-question">${escapeHtml(market.subtitle || market.title)}</span><span>${escapeHtml(market.status)}${market.result ? ` · ${escapeHtml(market.result)}` : ""}</span><span>${price}</span><span class="market-actions"><button type="button" data-import="${escapeHtml(market.ticker)}">IMPORT</button><button type="button" data-dossier="${escapeHtml(market.ticker)}">DOSSIER</button></span></article>`;
+    })
+    .join("");
+  $$("[data-import]").forEach((button) =>
+    button.addEventListener("click", () =>
+      importHarvestTicker(button.dataset.import),
+    ),
+  );
+  $$("[data-dossier]").forEach((button) =>
+    button.addEventListener("click", () =>
+      openHarvestDossier(button.dataset.dossier),
+    ),
+  );
+}
+async function listHarvestMarkets() {
+  const series = ($("#vault-series")?.value || "").trim();
+  const historical = $("#vault-ledger")?.value === "historical";
+  const el = $("#market-list");
+  if (el)
+    el.innerHTML =
+      '<div class="empty-state"><b>Asking Kalshi…</b>Public market list only.</div>';
+  try {
+    const query = new URLSearchParams({
+      series,
+      historical: historical ? "1" : "0",
+    });
+    const payload = await (
+      await fetch(`/api/harvester/markets?${query}`)
+    ).json();
+    if (payload.error) throw new Error(payload.error);
+    harvestState.markets = payload.markets || [];
+    harvestState.cursor = payload.cursor || null;
+    renderMarketList();
+    toast(
+      `${harvestState.markets.length} ${historical ? "historical" : "live"} contracts from ${series || "Kalshi"}.`,
+    );
+  } catch (error) {
+    harvestState.markets = [];
+    renderMarketList();
+    toast(error.message || "Kalshi market list failed.");
+  }
+}
+function renderDossier() {
+  const title = $("#dossier-title");
+  const body = $("#dossier-body");
+  if (!body) return;
+  const dossier = harvestState.dossier;
+  if (!dossier) {
+    if (title) title.textContent = "Select a market";
+    body.innerHTML =
+      "<p>Choose a contract to gather everything currently known about that event. Missing sources stay blank.</p>";
+    return;
+  }
+  if (title) title.textContent = dossier.question || dossier.ticker || "Event";
+  const kalshi = dossier.kalshi || {};
+  const poly = dossier.polymarket || {};
+  const sky = (trakState.windows || [])
+    .slice(0, 3)
+    .map(
+      (window) =>
+        `<div><b>${escapeHtml(window.title || "Window")}</b><span>${escapeHtml(window.currentPhase || "")} · ${Math.round(window.intensity || 0)}</span></div>`,
+    )
+    .join("");
+  const polyRows = (poly.markets || [])
+    .map(
+      (market) =>
+        `<div><b>${escapeHtml(market.question || market.slug || "Market")}</b></div>`,
+    )
+    .join("");
+  const planned = (dossier.sources || [])
+    .filter((source) => source.status === "planned")
+    .map((source) => escapeHtml(source.name))
+    .join(" · ");
+  body.innerHTML = `<div class="dossier-block"><span>QUESTION</span><p>${escapeHtml(dossier.question || "Unnamed event")}</p></div>
+    <div class="dossier-block"><span>PREDICTION MARKETS</span><div class="dossier-row"><b>Kalshi</b><em>${kalshi.last_price == null ? "—" : `${Math.round(kalshi.last_price)}¢`}</em><small>${escapeHtml(kalshi.ticker || dossier.ticker || "")} · ${escapeHtml(kalshi.status || "")}</small></div><div class="dossier-row"><b>Polymarket</b><em>${poly.status === "search" ? `${(poly.markets || []).length} hits` : poly.status || "empty"}</em></div>${polyRows || "<small>No independent match yet.</small>"}</div>
+    <div class="dossier-block"><span>TIMETRAK</span>${sky || "<p>Create a reference chart and ask Merlin. TimeTraks stay on the engine, not in this scrape.</p>"}</div>
+    <div class="dossier-block"><span>NOT CONNECTED YET</span><p>${planned || "None listed."}</p></div>`;
+}
+async function openHarvestDossier(ticker) {
+  harvestState.selected = ticker;
+  if ($("#vault-ticker")) $("#vault-ticker").value = ticker;
+  if ($("#dossier-body"))
+    $("#dossier-body").innerHTML = "<p>Gathering public records…</p>";
+  try {
+    const payload = await (
+      await fetch(`/api/harvester/dossier?ticker=${encodeURIComponent(ticker)}`)
+    ).json();
+    if (payload.error) throw new Error(payload.error);
+    harvestState.dossier = payload;
+    renderDossier();
+  } catch (error) {
+    harvestState.dossier = { question: ticker, error: error.message };
+    renderDossier();
+    toast(error.message || "Dossier failed.");
+  }
+}
+async function importHarvestTicker(ticker) {
+  const value = String(ticker || $("#vault-ticker")?.value || "").trim();
+  if (!value) {
+    toast("Choose a market or paste a ticker first.");
+    return;
+  }
+  if ($("#vault-ticker")) $("#vault-ticker").value = value;
+  if ($("#vault-status-label"))
+    $("#vault-status-label").textContent = "PYTHON IMPORT RUNNING";
+  if ($("#vault-progress-bar")) $("#vault-progress-bar").style.width = "35%";
+  if ($("#vault-errors")) $("#vault-errors").textContent = "0";
+  try {
+    const response = await fetch("/api/harvester/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker: value }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || `Import failed (${response.status})`);
+    }
+    const imported = payload.import || {};
+    if ($("#vault-records"))
+      $("#vault-records").textContent = imported.records_imported ?? 0;
+    if ($("#vault-duplicates"))
+      $("#vault-duplicates").textContent = imported.duplicates_skipped ?? 0;
+    if ($("#vault-progress-bar")) $("#vault-progress-bar").style.width = "100%";
+    applyVaultStatus(payload.status);
+    localStorage.setItem(
+      "merlin-oracle-vault",
+      JSON.stringify(payload.status || {}),
+    );
+    toast(
+      `Imported ${imported.records_imported ?? 0} rows for ${imported.ticker || value}.`,
+    );
+    await syncVaultFromApi();
+    openHarvestDossier(value);
+  } catch (error) {
+    if ($("#vault-errors")) $("#vault-errors").textContent = "1";
+    if ($("#vault-status-label"))
+      $("#vault-status-label").textContent = "IMPORT FAILED";
+    toast(error.message || "Python import failed.");
+  }
+}
+function runVaultImport() {
+  importHarvestTicker($("#vault-ticker")?.value);
+}
+async function importBinanceCandles() {
+  const symbol = ($("#feed-symbol")?.value || "BTCUSDT").trim().toUpperCase();
+  const interval = $("#feed-interval")?.value || "1m";
+  if ($("#vault-status-label"))
+    $("#vault-status-label").textContent = "BINANCE IMPORT RUNNING";
+  if ($("#feed-gate")) $("#feed-gate").textContent = "IMPORTING";
+  toast(`Importing public ${symbol} ${interval} candles…`);
+  try {
+    const response = await fetch("/api/harvester/candles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, interval }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) {
+      throw new Error(
+        payload.error || `Candle import failed (${response.status})`,
+      );
+    }
+    applyVaultStatus(payload.status);
+    const imported = payload.import || {};
+    toast(
+      `Stored ${imported.records_imported ?? 0} ${symbol} candles. Gate ${gateLabel(payload.status)}.`,
+    );
+  } catch (error) {
+    toast(error.message || "Binance import failed.");
+  }
+}
+function parseIndexFile(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  if (trimmed[0] === "[" || trimmed[0] === "{") {
+    const payload = JSON.parse(trimmed);
+    if (Array.isArray(payload)) return payload;
+    return (
+      payload.payload ||
+      payload.records ||
+      payload.data ||
+      payload.values ||
+      []
+    );
+  }
+  const lines = trimmed.split(/\r?\n/).filter(Boolean);
+  const header = lines[0].split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map((line) => {
+    const cells = line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""));
+    const row = {};
+    header.forEach((key, index) => {
+      row[key] = cells[index];
+    });
+    return row;
+  });
+}
+async function importIndexFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  const text = await file.text();
+  let records;
+  try {
+    records = parseIndexFile(text);
+  } catch (error) {
+    toast("Index file must be JSON or CSV with timestamp and value.");
+    return;
+  }
+  if (!Array.isArray(records) || !records.length) {
+    toast("Index file had no rows.");
+    return;
+  }
+  const symbol = ($("#feed-symbol")?.value || "BTCUSDT").trim().toUpperCase();
+  const interval = $("#feed-interval")?.value || "1m";
+  toast(`Importing ${records.length} public index rows…`);
+  try {
+    const response = await fetch("/api/harvester/index", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, interval, records }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || `Index import failed (${response.status})`);
+    }
+    applyVaultStatus(payload.status);
+    const imported = payload.import || {};
+    toast(
+      `Stored ${imported.records_imported ?? 0} index candles. Gate ${gateLabel(payload.status)}.`,
+    );
+  } catch (error) {
+    toast(error.message || "Index import failed.");
+  }
+}
+async function freezeEntry() {
+  const timestamp = ($("#freeze-timestamp")?.value || "").trim();
+  const dossier = $("#freeze-dossier");
+  if (!timestamp) {
+    toast("Enter an entry timestamp in UTC.");
+    return;
+  }
+  if (dossier) dossier.textContent = "Reconstructing market state at T…";
+  try {
+    const response = await fetch("/api/research/reconstruct", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        timestamp,
+        contract: ($("#freeze-contract")?.value || "").trim(),
+        target: ($("#freeze-target")?.value || "").trim(),
+        expiration: ($("#freeze-expiration")?.value || "").trim(),
+        symbol: ($("#feed-symbol")?.value || "BTCUSDT").trim(),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) {
+      throw new Error(
+        payload.error || `Reconstruct failed (${response.status})`,
+      );
+    }
+    if (dossier)
+      dossier.textContent =
+        payload.dossier || JSON.stringify(payload.entry, null, 2);
+    toast(
+      `Frozen ${payload.trade_id || "entry"} · ${payload.snapshots_written || 0} snapshots.`,
+    );
+    await syncVaultFromApi();
+  } catch (error) {
+    if (dossier) dossier.textContent = error.message || "Freeze failed.";
+    toast(error.message || "Freeze T failed.");
+  }
 }
 function renderDivergence() {
   const chart = $("#divergence-chart");
@@ -763,20 +1406,55 @@ function openModal(type) {
     $("#modal-eyebrow").textContent = "NEW FIXED POINT";
     $("#modal-title").textContent = "Create reference chart";
     copy.textContent =
-      "Set a precise point in time for the Oracle to investigate.";
-    form.innerHTML =
-      '<div class="form-grid"><div class="field"><label>NAME</label><input name="name" required placeholder="Bitcoin"></div><div class="field"><label>CHART TYPE</label><select name="type"><option>PERSON</option><option>EVENT</option><option>MARKET</option><option>EARTH</option><option>CUSTOM</option></select></div><div class="field full"><label>DESCRIPTION</label><textarea name="description"></textarea></div><div class="field"><label>DATE</label><input name="date" type="date" required></div><div class="field"><label>EXACT TIME</label><input name="time" type="time"></div><div class="field"><label>LOCATION</label><input name="location" placeholder="New York, NY"></div><div class="field"><label>SOURCE</label><input name="source" placeholder="Historical record"></div></div><button class="primary-button form-submit" type="submit">SAVE REFERENCE CHART →</button>';
-    form.onsubmit = (e) => {
+      "Merlin needs a date, time, and coordinates. The natal is calculated by the engine before it is stored here.";
+    const offset = -(new Date().getTimezoneOffset() / 60);
+    form.innerHTML = `<div class="form-grid"><div class="field"><label>NAME</label><input name="name" required placeholder="Bitcoin genesis"></div><div class="field"><label>CHART TYPE</label><select name="type"><option>PERSON</option><option>EVENT</option><option selected>MARKET</option><option>EARTH</option><option>CUSTOM</option></select></div><div class="field full"><label>DESCRIPTION</label><textarea name="description"></textarea></div><div class="field"><label>DATE</label><input name="date" type="date" required></div><div class="field"><label>EXACT TIME (LOCAL)</label><input name="time" type="time" value="12:00" required></div><div class="field"><label>LATITUDE</label><input name="lat" type="number" step="any" required placeholder="40.7128"></div><div class="field"><label>LONGITUDE</label><input name="lon" type="number" step="any" required placeholder="-74.0060"></div><div class="field"><label>TIMEZONE OFFSET (HOURS)</label><input name="timezoneOffset" type="number" step="any" value="${offset}" required></div><div class="field"><label>LOCATION LABEL</label><input name="location" placeholder="New York, NY"></div><div class="field full"><label>SOURCE</label><input name="source" placeholder="Historical record"></div></div><button class="primary-button form-submit" type="submit">CALCULATE WITH MERLIN →</button>`;
+    form.onsubmit = async (e) => {
       e.preventDefault();
-      store.charts.push({
-        ...Object.fromEntries(new FormData(form)),
-        created: new Date().toLocaleString(),
-      });
-      persist();
-      closeModal();
-      renderAll();
-      switchView("charts");
-      toast("Reference chart stored locally.");
+      const fields = Object.fromEntries(new FormData(form));
+      const submit = form.querySelector('[type="submit"]');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = "ASKING MERLIN…";
+      }
+      try {
+        const response = await fetch("/api/engine/chart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            birthDate: fields.date,
+            birthTime: fields.time || "12:00",
+            lat: Number(fields.lat),
+            lon: Number(fields.lon),
+            timezoneOffset: Number(fields.timezoneOffset),
+          }),
+        });
+        const natal = await response.json();
+        if (!response.ok || natal.success === false) {
+          throw new Error(natal.error || `Merlin returned ${response.status}`);
+        }
+        store.charts.push({
+          ...fields,
+          id: crypto.randomUUID(),
+          created: new Date().toLocaleString(),
+          engine: natal,
+        });
+        persist();
+        closeModal();
+        renderAll();
+        switchView("charts");
+        toast(
+          natal.source === "swiss-real"
+            ? "Natal stored from Merlin Swiss engine."
+            : `Natal stored from Merlin (${natal.source || "engine"}).`,
+        );
+      } catch (error) {
+        toast(error.message || "Merlin engine did not calculate this chart.");
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = "CALCULATE WITH MERLIN →";
+        }
+      }
     };
   } else if (type === "entry") {
     $("#modal-eyebrow").textContent = "BEFORE THE OUTCOME";
@@ -886,12 +1564,22 @@ $$('[data-action="new-experiment"]').forEach((b) =>
   b.addEventListener("click", () => openModal("experiment")),
 );
 $('[data-action="run-historical"]').addEventListener("click", runHistorical);
+if ($('[data-action="refresh-traks"]'))
+  $('[data-action="refresh-traks"]').addEventListener("click", () =>
+    loadTimeTraks(true),
+  );
+if ($("#trak-chart"))
+  $("#trak-chart").addEventListener("change", () => loadTimeTraks(true));
 $("#modal-close").addEventListener("click", closeModal);
 $("#modal-backdrop").addEventListener("click", (e) => {
   if (e.target.id === "modal-backdrop") closeModal();
 });
 $("#open-settings").addEventListener("click", () =>
-  toast("Oracle notes: offline, versioned, and private to this browser."),
+  toast(
+    engineStatus.connected
+      ? `Merlin engine live at ${engineStatus.engine}. Charts and TimeTraks are calculated there.`
+      : `Merlin engine down at ${engineStatus.engine}. Run npm run dev in X:\\Merlin.`,
+  ),
 );
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
@@ -905,3 +1593,5 @@ setInterval(updateClock, 1000);
 updateClock();
 ensureSeededAlmanacEntry();
 renderAll();
+refreshEngineStatus();
+setInterval(refreshEngineStatus, 15000);
