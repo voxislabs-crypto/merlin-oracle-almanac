@@ -3,9 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <title>Almanac research path</title>
+  <style>
+    body { font-family: Georgia, serif; background: #0b1220; color: #e8e4d8; max-width: 820px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.5; }
+    h1, h2 { color: #e6c56a; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+    th, td { border: 1px solid #3a4660; padding: 0.5rem 0.6rem; vertical-align: top; }
+    th { background: #162033; }
+    code { color: #8fd3c4; }
+    .rule { border-left: 3px solid #e6c56a; padding-left: 1rem; }
+  </style>
 </head>
 <body>
   <h1>The path</h1>
   <p>Kalshi is settlement truth. Binance is the live chart. The spread between them is the gate.</p>
+  <p class="rule">Do not start by asking why a trade won. Reconstruct everything that was knowable at the exact moment of entry. Settlement stays out of the feature vector until after the reconstruction is frozen.</p>
+  <h2>Two jobs, two feeds</h2>
+  <table>
+    <tr><th></th><th>Kalshi (truth)</th><th>Binance (sight)</th></tr>
+    <tr><td>Job</td><td>Contract, strike, expiry, YES/NO, fees, settlement index (BRTI for BTC)</td><td>Fine candlesticks, swings, Fibonacci, RSI/MACD/ATR</td></tr>
+    <tr><td>Already in the Almanac</td><td>Yes — client, importer, SQLite vault, UTC, settlements</td><td>Milestone 1 — public klines + spread table</td></tr>
+    <tr><td>What it is not</td><td>A professional chart</td><td>Kalshi’s settlement price</td></tr>
+  </table>
+  <h2>Build order</h2>
+  <ol>
+    <li>Feed + gate — Binance klines, truth ticks, spread snapshots.</li>
+    <li>Sight — RSI, MACD, ATR, EMA, VWAP, swings, Fibonacci.</li>
+    <li>Freeze T — T-60 through T. No settlement in that vector.</li>
+    <li>Control group — same setup, different outcome. Then Model A / B / C. Paper only after that.</li>
+  </ol>
 </body>
 </html>
