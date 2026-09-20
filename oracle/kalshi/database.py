@@ -3,9 +3,13 @@ import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, TYPE_CHECKING
 
 from .models import Market, Observation
+
+if TYPE_CHECKING:
+    from ..binance.models import Candle
+    from ..spread import SpreadSnapshot
 
 
 SCHEMA_VERSION = "kalshi-v1"
@@ -56,6 +60,40 @@ class KalshiDatabase:
                 records_imported INTEGER NOT NULL, duplicates_skipped INTEGER NOT NULL,
                 errors INTEGER NOT NULL, schema_version TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS candles (
+                source TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                interval TEXT NOT NULL,
+                open_time TEXT NOT NULL,
+                close_time TEXT,
+                open REAL, high REAL, low REAL, close REAL,
+                volume REAL, quote_volume REAL, trade_count INTEGER,
+                schema_version TEXT NOT NULL,
+                UNIQUE(source, symbol, interval, open_time)
+            );
+            CREATE TABLE IF NOT EXISTS truth_ticks (
+                source TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                price REAL NOT NULL,
+                note TEXT,
+                schema_version TEXT NOT NULL,
+                UNIQUE(source, symbol, timestamp)
+            );
+            CREATE TABLE IF NOT EXISTS spread_snapshots (
+                timestamp TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                sight_source TEXT NOT NULL,
+                sight_price REAL,
+                truth_source TEXT NOT NULL,
+                truth_price REAL,
+                abs_gap REAL,
+                gap_bps REAL,
+                threshold_bps REAL NOT NULL,
+                gate TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                UNIQUE(timestamp, symbol, sight_source, truth_source)
+            );
             """
         )
         market_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(markets)")}
@@ -78,6 +116,74 @@ class KalshiDatabase:
                 self.connection.execute(f"ALTER TABLE market_observations ADD COLUMN {name} {column_type}")
         self.connection.commit()
 
+    def save_candles(self, candles: Iterable["Candle"]) -> tuple[int, int]:
+        imported = 0
+        duplicates = 0
+        for candle in candles:
+            cursor = self.connection.execute(
+                """INSERT OR IGNORE INTO candles
+                (source, symbol, interval, open_time, close_time, open, high, low, close,
+                 volume, quote_volume, trade_count, schema_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    candle.source, candle.symbol, candle.interval, candle.open_time, candle.close_time,
+                    candle.open, candle.high, candle.low, candle.close, candle.volume,
+                    candle.quote_volume, candle.trade_count, SCHEMA_VERSION,
+                ),
+            )
+            if cursor.rowcount:
+                imported += 1
+            else:
+                duplicates += 1
+        self.connection.commit()
+        return imported, duplicates
+
+    def save_truth_tick(self, source: str, symbol: str, timestamp: str, price: float, note: str | None = None) -> None:
+        self.connection.execute(
+            """INSERT INTO truth_ticks(source, symbol, timestamp, price, note, schema_version)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(source, symbol, timestamp) DO UPDATE SET
+               price=excluded.price, note=excluded.note""",
+            (source, symbol.upper(), timestamp, price, note, SCHEMA_VERSION),
+        )
+        self.connection.commit()
+
+    def save_spread(self, snap: "SpreadSnapshot") -> None:
+        self.connection.execute(
+            """INSERT INTO spread_snapshots
+               (timestamp, symbol, sight_source, sight_price, truth_source, truth_price,
+                abs_gap, gap_bps, threshold_bps, gate, schema_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(timestamp, symbol, sight_source, truth_source) DO UPDATE SET
+               sight_price=excluded.sight_price, truth_price=excluded.truth_price,
+               abs_gap=excluded.abs_gap, gap_bps=excluded.gap_bps,
+               threshold_bps=excluded.threshold_bps, gate=excluded.gate""",
+            (
+                snap.timestamp, snap.symbol, snap.sight_source, snap.sight_price,
+                snap.truth_source, snap.truth_price, snap.abs_gap, snap.gap_bps,
+                snap.threshold_bps, snap.gate, SCHEMA_VERSION,
+            ),
+        )
+        self.connection.commit()
+
+    def latest_candle_close(self, source: str, symbol: str, interval: str, at_or_before: str) -> float | None:
+        row = self.connection.execute(
+            """SELECT close FROM candles
+               WHERE source = ? AND symbol = ? AND interval = ? AND open_time <= ?
+               ORDER BY open_time DESC LIMIT 1""",
+            (source, symbol.upper(), interval, at_or_before),
+        ).fetchone()
+        return None if row is None else float(row[0])
+
+    def truth_at(self, source: str, symbol: str, at_or_before: str) -> float | None:
+        row = self.connection.execute(
+            """SELECT price FROM truth_ticks
+               WHERE source = ? AND symbol = ? AND timestamp <= ?
+               ORDER BY timestamp DESC LIMIT 1""",
+            (source, symbol.upper(), at_or_before),
+        ).fetchone()
+        return None if row is None else float(row[0])
+
     def save_market(self, market: Market) -> None:
         self.connection.execute(
             """INSERT INTO markets (ticker, event, title, question, category, created_time, open_time, close_time,
@@ -89,19 +195,9 @@ class KalshiDatabase:
                status=excluded.status, rules=excluded.rules, settlement_source=excluded.settlement_source,
                schema_version=excluded.schema_version""",
             (
-                market.ticker,
-                market.event,
-                market.title,
-                market.question,
-                market.category,
-                market.created_time,
-                market.open_time,
-                market.close_time,
-                market.settlement_time,
-                market.status,
-                market.rules,
-                market.settlement_source,
-                SCHEMA_VERSION,
+                market.ticker, market.event, market.title, market.question, market.category,
+                market.created_time, market.open_time, market.close_time, market.settlement_time,
+                market.status, market.rules, market.settlement_source, SCHEMA_VERSION,
             ),
         )
         self.connection.commit()
@@ -155,7 +251,22 @@ class KalshiDatabase:
 
         bounds = self.connection.execute("SELECT MIN(timestamp), MAX(timestamp) FROM market_observations").fetchone()
         last = self.connection.execute("SELECT finished_at FROM import_log ORDER BY id DESC LIMIT 1").fetchone()
-        return {"markets": count("markets"), "observations": count("market_observations"), "results": count("market_results"), "earliest_timestamp": bounds[0], "latest_timestamp": bounds[1], "last_import": last[0] if last else None}
+        candle_bounds = self.connection.execute("SELECT MIN(open_time), MAX(open_time) FROM candles").fetchone()
+        gates = self.connection.execute("SELECT gate, COUNT(*) FROM spread_snapshots GROUP BY gate").fetchall()
+        return {
+            "markets": count("markets"),
+            "observations": count("market_observations"),
+            "results": count("market_results"),
+            "candles": count("candles"),
+            "truth_ticks": count("truth_ticks"),
+            "spread_snapshots": count("spread_snapshots"),
+            "spread_gates": {row[0]: row[1] for row in gates},
+            "earliest_timestamp": bounds[0],
+            "latest_timestamp": bounds[1],
+            "earliest_candle": candle_bounds[0],
+            "latest_candle": candle_bounds[1],
+            "last_import": last[0] if last else None,
+        }
 
     def close(self) -> None:
         self.connection.close()
